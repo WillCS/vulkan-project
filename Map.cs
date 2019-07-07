@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.Geometry;
 
 namespace Game {
     public class Floor {
