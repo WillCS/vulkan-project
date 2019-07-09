@@ -222,6 +222,8 @@ namespace Game.Math {
             return new Vector2(code1, code2).GetHashCode();
         }
 
+        #endregion Methods
+
         #region StaticFunctions
 
         public static Matrix2 RotationMatrix(double angle) =>
