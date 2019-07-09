@@ -1,5 +1,7 @@
 ﻿using System;
 using GLFW;
+using Game.Math;
+using Game.Physics;
 
 namespace Game {
     public class Program {
@@ -14,9 +16,15 @@ namespace Game {
         private double timeLastLoop = 0;
         private double accumulator = 0;
 
-        static void Main(string[] args) {
-            Program program = new Program();
-            program.Run();
+        static void Main(string[] args) {Program program = new Program();
+            Circle circle = new Circle(new Vector2(2, 2), 1);
+            Ray ray = new Ray(new Vector2(0, 0), new Vector2(1, 1));
+            foreach(Vector2 intersection in circle.CastRay(ray)) {
+                Console.WriteLine($"{intersection.X}, {intersection.Y}");
+            }
+
+            // Program program = new Program();
+            // program.Run();
         }
 
         private void Run() {

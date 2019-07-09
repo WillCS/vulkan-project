@@ -1,5 +1,6 @@
 using Game.Math;
 using System.Collections.Generic;
+using System;
 
 namespace Game.Physics {
     public interface IPhysicsBody {
@@ -60,25 +61,21 @@ namespace Game.Physics {
         //      the ray - in both directions - so we cull any intersections
         //      with a negative t.
         public IEnumerable<Vector2> CastRay(Ray ray) {
-            double a = ray.Direction.Dot(ray.Direction);
-            double b = 2 * (
-                ray.Direction.X * (ray.Origin.X - this.Position.X) +
-                ray.Direction.Y * (ray.Origin.Y - this.Position.Y));
-            double c = ray.Origin.Dot(ray.Origin) - 2 * (
-                ray.Origin.X * this.Position.X +
-                ray.Origin.Y * this.Position.Y) + 
-                this.Position.Dot(this.Position) -
-                this.Radius * this.Radius;
+            Vector2 delta = ray.Origin - this.Position;
+
+            double a = ray.Direction.MagnitudeSquared;
+            double b = 2 * ray.Direction.Dot(delta);
+            double c = delta.MagnitudeSquared - this.Radius * this.Radius;
 
             List<Vector2> intersections = new List<Vector2>();
 
             if(a < double.Epsilon) {
                 return intersections;
             }
-            double det = System.Math.Sqrt(4 * a * c);
+            double det = System.Math.Sqrt(b * b - 4 * a * c);
 
-            double t1 = (b + det) / (2 * a);
-            double t2 = (b - det) / (2 * a);
+            double t1 = (-b + det) / (2 * a);
+            double t2 = (-b - det) / (2 * a);
 
             if(t1 >= 0) {
                 intersections.Add(ray.Origin + t1 * ray.Direction);
