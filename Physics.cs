@@ -116,4 +116,53 @@ namespace Game.Physics {
                 : this(centre, sideLength, sideLength) {
         }
     }
+
+    public class Line {
+        private Vector2 start;
+        private Vector2 end;
+
+        private double length;
+
+        private bool isDirty;
+
+        public Line(Vector2 start, Vector2 end) {
+            this.start = start;
+            this.end = end;
+        }
+
+        public Vector2 Start {
+            get => this.start;
+            set {
+                this.start = value;
+                this.isDirty = true;
+            }
+        }
+
+        public Vector2 End {
+            get => this.end;
+            set {
+                this.end = value;
+                this.isDirty = true;
+            }
+        }
+
+        public double LengthSquared {
+            get {
+                double dX = end.X - start.X;
+                double dY = end.Y - start.Y;
+                return dX * dX + dY * dY;
+            }
+        }
+
+        public double Length {
+            get {
+                if(this.isDirty) {
+                    this.length = System.Math.Sqrt(this.LengthSquared);
+                    this.isDirty = false;
+                }
+
+                return this.length;
+            }
+        }
+    }
 }
