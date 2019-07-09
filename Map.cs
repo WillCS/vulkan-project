@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Game.Geometry;
+using Game.Math;
 
 namespace Game {
     public class Floor {
@@ -11,7 +11,7 @@ namespace Game {
         private Dictionary<int, string> tileMappings;
 
         protected Floor() {
-
+            
         }
 
         public int XSize { 
