@@ -3,15 +3,10 @@ using System.Collections.Generic;
 using System;
 
 namespace Game.Physics {
-    public interface IPhysicsBody {
-        Vector2 Position {
-            get;
-            set;
-        }
+    public interface IPhysicsShape {
+        Vector2 Position { get; set; }
 
         IEnumerable<Vector2> CastRay(Ray ray);
-
-        void Transform(double scale);
 
         void Translate(Vector2 translation);
 
@@ -28,7 +23,7 @@ namespace Game.Physics {
         }
     }
 
-    public class Circle : IPhysicsBody {
+    public class Circle : IPhysicsShape {
         private Vector2 centre;
 
         public Vector2 Position {
@@ -42,24 +37,26 @@ namespace Game.Physics {
             this.Radius = radius;
         }
 
-        // 
-        // Summary:
-        //      We calculate the points of interection between the ray
-        //      and the circle by substituting the paramaterised equations
-        //      of a line (the ray) into the equation of a circle. 
-
-        //      x(t) = ray.origin.X + t * ray.Direction.X
-        //      y(t) = ray.Origin.Y + t * ray.Direction.Y
-        //      (x(t) - this.Position.X)^2 + (y(t) - this.Position.Y)^2 = this.Radius^2
-        
-        //      The resulting equation happens to be quadratic, so we solve
-        //      it for t to get our two intersections.
-        //      Two intersections when the ray goes straight through,
-        //      One intersections when the ray only tangentially touches,
-        //      and none when it doesn't intersect at all. 
-        //      This gives us any intersections along the line given by
-        //      the ray - in both directions - so we cull any intersections
-        //      with a negative t.
+        ///<summary>
+        ///     We calculate the points of interection between the ray
+        ///     and the circle by substituting the paramaterised equations
+        ///     of a line (the ray) into the equation of a circle:
+        ///
+        ///     x(t) = ray.origin.X + t * ray.Direction.X
+        ///
+        ///     y(t) = ray.Origin.Y + t * ray.Direction.Y
+        ///
+        ///     (x(t) - this.Position.X)^2 + (y(t) - this.Position.Y)^2 = this.Radius^2
+        ///
+        ///     The resulting equation happens to be quadratic, so we solve
+        ///     it for t to get our two intersections.
+        ///     Two intersections when the ray goes straight through,
+        ///     One intersections when the ray only tangentially touches,
+        ///     and none when it doesn't intersect at all. 
+        ///     This gives us any intersections along the line given by
+        ///     the ray - in both directions - so we cull any intersections
+        ///    with a negative t.
+        ///</summary>
         public IEnumerable<Vector2> CastRay(Ray ray) {
             Vector2 delta = ray.Origin - this.Position;
 
@@ -88,38 +85,122 @@ namespace Game.Physics {
             return intersections;
         }
 
-        public void Transform(double scale) {
-            this.Radius *= scale;
-        }
-
         public void Translate(Vector2 translation) {
             this.centre += translation;
         }
 
         public void Rotate(double rotation) {
-            // ¯\_(ツ)_/¯
+            ///¯\_(ツ)_/¯
         }
     }
 
-    public class Rectangle {
-        public Vector2 Centre;
-        public double MajorSideLength;
-        public double MinorSideLength;
+    public class Polygon : IPhysicsShape {
+        protected Vector2[] points;
+        protected Vector2 position;
 
-        public Rectangle(Vector2 centre, double majorLength, double minorLength) {
-            this.Centre = centre;
-            this.MajorSideLength = majorLength;
-            this.MinorSideLength = minorLength;
+        public Vector2 Position {
+            get => this.position;
+            set => this.position = value;
         }
 
-        public Rectangle(Vector2 centre, double sideLength) 
-                : this(centre, sideLength, sideLength) {
+        public Polygon(Vector2 position, IEnumerable<Vector2> points) {
+            this.setPoints(points);
+            this.position = position;
+        }
+
+        protected void setPoints(IEnumerable<Vector2> points) {
+            List<Vector2> pointsList = new List<Vector2>();
+            foreach(Vector2 point in points) {
+                pointsList.Add(new Vector2(point.X, point.Y));
+            }
+
+            this.points = pointsList.ToArray();
+        }
+
+        public IEnumerable<Vector2> CastRay(Ray ray) {
+            throw new NotImplementedException();
+        }
+
+        public void Translate(Vector2 translation) {
+            this.position += translation;
+        }
+
+        public void Rotate(double rotation) {
+            Matrix2 rotationMatrix = Matrix2.RotationMatrix(rotation);
+            for(int i = 0; i < this.points.Length; i++) {
+                this.points[i] = rotationMatrix * this.points[i];
+            }
+        }
+
+        public void PrintPoints() {
+            foreach(Vector2 point in this.points) {
+                Console.WriteLine(point);
+            }
         }
     }
 
-    public class Line {
+    public class Rectangle : Polygon {
+
+        private double width;
+        private double height;
+
+        public double Width {
+            get => this.width;
+            set {
+                this.width = value;
+
+                var points = getPoints(this.width, this.height);
+                this.setPoints(points);
+            }
+        }
+
+        public double Height {
+            get => this.height;
+            set {
+                this.height = value;
+
+                var points = getPoints(this.width, this.height);
+                this.setPoints(points);
+            }
+        }
+
+        public Rectangle(Vector2 position, double width, double height) 
+                : base(position, getPoints(width, height)) {
+            this.width = width;
+            this.height = height;
+        }
+
+        private static IEnumerable<Vector2> getPoints(double width, double height) {
+            double halfWidth = width / 2;
+            double halfHeight = height / 2;
+            return new Vector2[] {
+                new Vector2(-halfWidth, -halfHeight),
+                new Vector2(-halfWidth,  halfHeight),
+                new Vector2( halfWidth, -halfHeight),
+                new Vector2( halfWidth,  halfHeight)
+            };
+        }
+
+        public static Rectangle Square(Vector2 centre, double sideLength) =>
+            new Rectangle(centre, sideLength, sideLength);
+
+        public static Rectangle FromTopRight(Vector2 position, double width, double height) {
+            Vector2 centre = position + new Vector2(width / 2, height / 2);
+            return new Rectangle(centre, width, height);
+        }
+
+        public static Rectangle SquareFromTopRight(Vector2 position, double sideLength) =>
+            FromTopRight(position, sideLength, sideLength);
+    }
+
+    public class Line : IPhysicsShape {
         private Vector2 start;
         private Vector2 end;
+
+        public Vector2 Position { 
+            get => this.Start; 
+            set => this.Start = value; 
+        }
 
         private double length;
 
@@ -163,6 +244,37 @@ namespace Game.Physics {
 
                 return this.length;
             }
+        }
+
+        public IEnumerable<Vector2> CastRay(Ray ray) {
+            Vector2 delta = this.End - this.Start;
+            double m = delta.Y / delta.X;
+            double c = this.Start.Y - m * this.start.X;
+
+            if(MathHelper.ApproximatelyEqual(ray.Direction.Y, m * ray.Direction.X)) {
+                yield break;
+            }
+
+            double t = (m * ray.Origin.X + c - ray.Origin.Y) / (ray.Direction.Y - m * ray.Direction.X);
+
+            Vector2 intersection = t * ray.Direction;
+
+            if(t < 0 || (intersection - this.Start).MagnitudeSquared > this.LengthSquared) {
+                yield break;
+            }
+
+            yield return intersection;
+        }
+
+        public void Rotate(double rotation) {
+            Vector2 delta = this.End - this.Start;
+            Matrix2 rotationMatrix = Matrix2.RotationMatrix(rotation);
+            Vector2 rotatedDelta = rotationMatrix * delta;
+            this.End = this.Start + rotatedDelta;
+        }
+
+        public void Translate(Vector2 translation) {
+            this.Start += translation;
         }
     }
 }

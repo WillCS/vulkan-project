@@ -1,0 +1,114 @@
+namespace Game.Math {
+    public class Matrix2 {
+
+        #region StaticFields
+
+        public static Matrix2 IDENTITY {
+            get => new Matrix2(1, 0, 0, 1);
+        }
+
+        public static Matrix2 ZERO {
+            get => new Matrix2(0, 0, 0, 0);
+        }
+
+        #endregion StaticFields
+
+        #region PrivateFields
+
+        // [a b]
+        // [c d]
+
+        private double a;
+        private double b;
+        private double c;
+        private double d;
+
+        #endregion PrivateFields
+
+        #region Properties
+
+        public double Determinant {
+            get => this.a * this.d - this.b * this.c;
+        }
+
+        public Matrix2 Transpose {
+            get => new Matrix2(this.a, this.c, this.b, this.d);
+        }
+
+        public Matrix2 Inverse {
+            get => this.Determinant * new Matrix2(this.d, -this.b, -this.c, this.a);
+        }
+
+        #endregion Properties
+
+        public Matrix2(double a, double b, double c, double d) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+            this.d = d;
+        }
+
+        #region Methods
+
+        public override bool Equals(object obj) {
+            if (obj == null || obj is Matrix2) {
+                return false;
+            }
+
+            Matrix2 m = obj as Matrix2;
+            return this.a == m.a && this.b == m.b && this.c == m.c && this.d == m.d;
+
+        }
+
+        public override int GetHashCode() {
+            int code1 = new Vector2(this.a, this.b).GetHashCode();
+            int code2 = new Vector2(this.c, this.d).GetHashCode();
+
+            return new Vector2(code1, code2).GetHashCode();
+        }
+
+        #endregion Methods
+
+        #region StaticFunctions
+
+        public static Matrix2 RotationMatrix(double angle) {
+            double sin = System.Math.Sin(angle);
+            double cos = System.Math.Cos(angle);
+            return new Matrix2(cos, -sin, sin, cos);
+        }
+
+        #region OperatorOverloads
+
+        public static Matrix2 operator +(Matrix2 m1, Matrix2 m2) =>
+            new Matrix2(m1.a + m2.a, m1.b + m2.b, m1.c + m2.c, m1.d + m2.d);
+
+        public static Matrix2 operator -(Matrix2 m1, Matrix2 m2) =>
+            m1 + -m2;
+
+        public static Matrix2 operator -(Matrix2 m) =>
+            -1 * m;
+
+        public static Matrix2 operator *(double s1, Matrix2 m2) =>
+            new Matrix2(s1 * m2.a, s1 * m2.b, s1 * m2.c, s1 * m2.d);
+
+        public static Matrix2 operator *(Matrix2 m1, double s2) =>
+            s2 * m1;
+
+        public static Matrix2 operator *(Matrix2 m1, Matrix2 m2) =>
+            new Matrix2(
+                m1.a * m2.a + m1.b * m2.c, 
+                m1.a * m2.b + m1.b * m2.d,
+                m1.b * m2.a + m1.d * m2.c,
+                m1.b * m2.b + m1.d * m2.d);
+
+        public static Matrix2 operator /(Matrix2 m1, double s2) =>
+            m1 * (1 / s2);
+
+        public static Vector2 operator *(Matrix2 m1, Vector2 v2) =>
+            new Vector2(m1.a * v2.X + m1.b * v2.Y, m1.c * v2.X + m1.d * v2.Y);
+
+        #endregion OperatorOverloads
+
+        #endregion StaticFunctions
+    }
+}
