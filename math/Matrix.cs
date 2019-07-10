@@ -48,6 +48,13 @@ namespace Game.Math {
             this.d = d;
         }
 
+        public Matrix2(Vector2 ac, Vector2 bd) {
+            this.a = ac.X;
+            this.c = ac.Y;
+            this.b = bd.X;
+            this.d = bd.Y;
+        }
+
         #region Methods
 
         public override bool Equals(object obj) {

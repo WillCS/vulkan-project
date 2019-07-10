@@ -118,7 +118,18 @@ namespace Game.Physics {
         }
 
         public IEnumerable<Vector2> CastRay(Ray ray) {
-            throw new NotImplementedException();
+            List<Vector2> intersections = new List<Vector2>();
+
+            for(int i = 0; i < this.points.Length; i++) {
+                Vector2 LineStart = this.Position + this.points[i];
+                Vector2 LineEnd = this.Position + this.points[(i + 1) % this.points.Length];
+                Line side = new Line(LineStart, LineEnd);
+                foreach(Vector2 intersection in side.CastRay(ray)) {
+                    intersections.Add(intersection);
+                }
+            }
+
+            return intersections;
         }
 
         public void Translate(Vector2 translation) {
@@ -176,8 +187,8 @@ namespace Game.Physics {
             return new Vector2[] {
                 new Vector2(-halfWidth, -halfHeight),
                 new Vector2(-halfWidth,  halfHeight),
-                new Vector2( halfWidth, -halfHeight),
-                new Vector2( halfWidth,  halfHeight)
+                new Vector2( halfWidth,  halfHeight),
+                new Vector2( halfWidth, -halfHeight)
             };
         }
 
@@ -246,24 +257,45 @@ namespace Game.Physics {
             }
         }
 
+        /// <summary>
+        ///     What we do here is actually similar to what we had
+        ///     to do for the circle - we parameterise the equations
+        ///     for both our line and our ray.
+        ///
+        ///     x(t1) = ray.Origin.X + t1 * ray.Direction.X
+        ///
+        ///     y(t1) = ray.Origin.Y + t1 * ray.Direction.Y
+        ///     
+        ///     x(t2) = this.Start.X + t2 * (this.End - this.Start).Y
+        ///
+        ///     y(t2) = this.Start.Y + t2 * (this.End - this.Start).Y
+        ///
+        ///     This time, however, we use Cramer's Rule to solve for
+        ///     t1 and t2. To get our point of intersection, we only
+        ///     need one of them, but in order to ensure that our
+        ///     point of intersection is actually on the line and isn't
+        ///     in the opposite direction of the ray, we need both.     
+        /// </summary>
         public IEnumerable<Vector2> CastRay(Ray ray) {
-            Vector2 delta = this.End - this.Start;
-            double m = delta.Y / delta.X;
-            double c = this.Start.Y - m * this.start.X;
+            Vector2 distanceFromLineToRay = this.Start - ray.Origin;
+            Vector2 lineDirection = this.End - this.Start;
 
-            if(MathHelper.ApproximatelyEqual(ray.Direction.Y, m * ray.Direction.X)) {
-                yield break;
+            Matrix2 coefficientMatrix = new Matrix2(ray.Direction, lineDirection);
+
+            double denominator = coefficientMatrix.Determinant;
+            if(!MathHelper.ApproximatelyEqual(denominator, 0)) {
+                Matrix2 t1Matrix = new Matrix2(distanceFromLineToRay, lineDirection);
+                Matrix2 t2Matrix = new Matrix2(ray.Direction, -distanceFromLineToRay);
+                
+                double t1 = t1Matrix.Determinant / denominator;
+                double t2 = t2Matrix.Determinant / denominator;
+
+                if(t1 >= 0 && t2 >= 0 && t2 <= 1) {
+                    return new Vector2[] { this.Start + t2 * lineDirection };
+                }
             }
 
-            double t = (m * ray.Origin.X + c - ray.Origin.Y) / (ray.Direction.Y - m * ray.Direction.X);
-
-            Vector2 intersection = t * ray.Direction;
-
-            if(t < 0 || (intersection - this.Start).MagnitudeSquared > this.LengthSquared) {
-                yield break;
-            }
-
-            yield return intersection;
+            return new Vector2[0];
         }
 
         public void Rotate(double rotation) {

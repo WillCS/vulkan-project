@@ -17,9 +17,10 @@ namespace Game {
         private double accumulator = 0;
 
         static void Main(string[] args) {Program program = new Program();
-            Circle circle = new Circle(new Vector2(2, 2), 1);
-            Ray ray = new Ray(new Vector2(0, 0), new Vector2(1, 1));
-            foreach(Vector2 intersection in circle.CastRay(ray)) {
+            Rectangle square = new Rectangle(new Vector2(1.5, 1.5), 1, 1);
+            square.Rotate((System.Math.PI / 4));
+            Ray ray = new Ray(new Vector2(0, 0), new Vector2(1, 0.75));
+            foreach(Vector2 intersection in square.CastRay(ray)) {
                 Console.WriteLine(intersection);
             }
 
