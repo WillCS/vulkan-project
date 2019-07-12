@@ -1,5 +1,6 @@
 ﻿using System;
 using GLFW;
+using OpenGL;
 using Game.Math;
 using Game.Physics;
 
@@ -16,16 +17,9 @@ namespace Game {
         private double timeLastLoop = 0;
         private double accumulator = 0;
 
-        static void Main(string[] args) {Program program = new Program();
-            Rectangle square = new Rectangle(new Vector2(1.5, 1.5), 1, 1);
-            square.Rotate((System.Math.PI / 4));
-            Ray ray = new Ray(new Vector2(0, 0), new Vector2(1, 0.75));
-            foreach(Vector2 intersection in square.CastRay(ray)) {
-                Console.WriteLine(intersection);
-            }
-
-            // Program program = new Program();
-            // program.Run();
+        static void Main(string[] args) {
+            Program program = new Program();
+            program.Run();
         }
 
         private void Run() {
@@ -36,9 +30,9 @@ namespace Game {
         }
 
         private void InitWindow() {
-            ErrorCallback errorHandler = (ErrorCode ErrorCode, IntPtr message) => {
+            ErrorCallback errorHandler = (GLFW.ErrorCode ErrorCode, IntPtr message) => {
                 Console.WriteLine(ErrorCode);
-                string errorMsg = System.Runtime.InteropServices.Marshal.PtrToStringUTF8(message);
+                string errorMsg = System.Runtime.InteropServices.Marshal.PtrToStringAuto(message);
                 Console.WriteLine(errorMsg);
             };
 
@@ -49,12 +43,31 @@ namespace Game {
 
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.OpenGL);
             Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
+            Glfw.WindowHint(Hint.ContextVersionMajor, 3);
+            Glfw.WindowHint(Hint.ContextVersionMinor, 3);
+            Glfw.WindowHint(Hint.OpenglProfile, GLFW.Profile.Core);
 
+            // OS X
+            // Glfw.WindowHint(Hint.OpenglForwardCompatible, GLFW.Constants.True);
             this.window = Glfw.CreateWindow(WIDTH, HEIGHT, "OpenGL", Monitor.None, Window.None);
         }
 
-        private void InitOpenGL() {
+        private void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
+            Window window = System.Runtime.InteropServices.Marshal.PtrToStructure<Window>(windowPointer);
+            Console.WriteLine(window == this.window);
+            Glfw.MakeContextCurrent(window);
+            Gl.Viewport(0, 0, width, height);
+        }
 
+        private void InitOpenGL() {
+            Gl.Initialize();
+            Glfw.MakeContextCurrent(this.window);
+            Gl.BindAPI();
+
+            Glfw.MakeContextCurrent(this.window);
+            Glfw.SetFramebufferSizeCallback(this.window, this.SetFrameBufferSize);
+            
+            Gl.Viewport(0, 0, WIDTH, HEIGHT);
         }
 
         private void MainLoop() {
