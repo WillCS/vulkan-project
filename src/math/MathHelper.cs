@@ -23,5 +23,9 @@ namespace Game.Math {
                 return num * IntegerPower(num, power - 1);
             }
         }
+
+        public static uint Clamp(uint lowerBound, uint between, uint upperBound) {
+            return System.Math.Max(lowerBound, System.Math.Min(between, upperBound));
+        }
     }
 }

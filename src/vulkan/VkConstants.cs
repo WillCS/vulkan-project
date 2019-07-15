@@ -4,6 +4,7 @@ namespace Game.Vulkan {
         
         public static readonly string VK_EXT_debug_report = "VK_EXT_debug_report";
         public static readonly string VK_EXT_debug_utils = "VK_EXT_debug_utils";
+        public static readonly string VK_KHR_swapchain = "VK_KHR_swapchain";
 
     }
 }

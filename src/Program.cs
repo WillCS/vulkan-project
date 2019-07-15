@@ -1,19 +1,20 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using GLFW;
-using Game.Math;
-using Game.Physics;
 using Game.Vulkan;
 using Vk = Vulkan;
 using System.Text;
 using System.Collections.Generic;
-using System.Runtime.Serialization;
-using System.Reflection;
 
 namespace Game {
     public class Program {
 
-        private string[] requiredExtensions = {
+        private string[] instanceExtensions = {
+
+        };
+
+        private string[] deviceExtensions = {
+            VkConstants.VK_KHR_swapchain
         };
 
         private string[] validationLayers = {
@@ -37,8 +38,13 @@ namespace Game {
         private Vk.Queue vkGraphicsQueue;
         private Vk.Queue vkPresentationQueue;
         private Vk.SurfaceKhr vkSurface;
+        private Vk.SwapchainKhr vkSwapchain;
         private Vk.DebugReportCallbackExt debugCallback;
-        private QueueFamilyIndices queueFamilies;
+        private Vk.Image[] vkSwapchainImages;
+        private Vk.ImageView[] vkSwapchainImageViews;
+        private QueueFamilyIndices vkQueueFamilies;
+        private Vk.Format vkSwapchainImageFormat;
+        private Vk.Extent2D vkSwapchainExtent;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -100,10 +106,14 @@ namespace Game {
                 this.CreateWindowSurface();
 
                 this.vkPhysicalDevice = VkHelper.SelectPhysicalDevice(this.vkInstance, this.CheckPhysicalDeviceSuitability);
-                this.CreateDevice();
-                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.queueFamilies.GraphicsFamily.Value, 0);
-                this.vkPresentationQueue = this.vkDevice.GetQueue(this.queueFamilies.PresentationFamily.Value, 0);
 
+                this.CreateLogicalDevice();
+
+                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
+                this.vkPresentationQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
+
+                this.CreateSwapchain();
+                this.CreateImageViews();
             } else {
                 Console.WriteLine("No Vulkan :(");
             }
@@ -122,7 +132,7 @@ namespace Game {
             builder.SetApiVersion(Vk.Version.Make(1, 0, 0));
 
             builder.EnableExtensions(VkHelper.GetGLFWRequiredInstanceExtensions());
-            builder.EnableExtensions(this.requiredExtensions);
+            builder.EnableExtensions(this.instanceExtensions);
 
             if(this.ShouldUseValidationLayers()) {
                 builder.EnableExtensions(this.extensionsRequiredForValidationLayers);
@@ -185,16 +195,31 @@ namespace Game {
         }
 
         private bool CheckPhysicalDeviceSuitability(Vk.PhysicalDevice device) {
-            return VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, 
-                    Vk.QueueFlags.Graphics, this.vkSurface, out this.queueFamilies);
+            bool queueSupport = VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, 
+                    Vk.QueueFlags.Graphics, this.vkSurface, out this.vkQueueFamilies);
+
+            if(!queueSupport) return false;
+
+            bool extensionSupport = VkHelper.CheckDeviceExtensionSupport(device,
+                    this.deviceExtensions);
+
+            if(!extensionSupport) return false;
+
+            SwapchainSupportDetails swapchainSupport = 
+                    VkHelper.QuerySwapchainSupport(device, this.vkSurface);
+
+            bool swapchainAdequate = swapchainSupport.formats.Length != 0 &&
+                    swapchainSupport.presentModes.Length != 0;
+
+            return swapchainAdequate;
         }
 
-        private void CreateDevice() {
+        private void CreateLogicalDevice() {
             LogicalDeviceBuilder builder = new LogicalDeviceBuilder();
 
             HashSet<uint> queueTypes = new HashSet<uint>(new uint[] {
-                this.queueFamilies.GraphicsFamily.Value,
-                this.queueFamilies.PresentationFamily.Value
+                this.vkQueueFamilies.GraphicsFamily.Value,
+                this.vkQueueFamilies.PresentFamily.Value
             });
 
             foreach(uint queueType in queueTypes) {
@@ -205,6 +230,8 @@ namespace Game {
 
                 builder.EnableQueue(queueInfo);
             }
+
+            builder.EnableExtensions(this.deviceExtensions);
 
             // Vk.PhysicalDeviceFeatures deviceFeatures = new Vk.PhysicalDeviceFeatures();
             // builder.SetFeatures(deviceFeatures);
@@ -218,6 +245,91 @@ namespace Game {
             } catch(Vk.ResultException result) {
                 Console.Error.WriteLine("An error occurred while creating the logical device.");
                 Console.Error.WriteLine(result.Result);
+            }
+        }
+
+        private void CreateSwapchain() {
+            SwapchainSupportDetails support = VkHelper.QuerySwapchainSupport(this.vkPhysicalDevice, this.vkSurface);
+            Vk.SurfaceFormatKhr format      = VkHelper.SelectSwapSurfaceFormat(support.formats);
+            Vk.PresentModeKhr presentMode   = VkHelper.SelectSwapPresentMode(support.presentModes);
+            Vk.Extent2D extent              = VkHelper.SelectSwapExtent(support.capabilities, WIDTH, HEIGHT);
+
+            uint imageCount = support.capabilities.MinImageCount + 1;
+
+            if(support.capabilities.MaxImageCount > 0 && imageCount > support.capabilities.MaxImageCount) {
+                imageCount = support.capabilities.MaxImageCount;
+            }
+
+            Vk.SwapchainCreateInfoKhr createInfo = new Vk.SwapchainCreateInfoKhr();
+            createInfo.Surface          = this.vkSurface;
+            createInfo.MinImageCount    = imageCount;
+            createInfo.ImageFormat      = format.Format;
+            createInfo.ImageColorSpace  = format.ColorSpace;
+            createInfo.ImageExtent      = extent;
+            createInfo.ImageArrayLayers = 1;
+            createInfo.ImageUsage       = Vk.ImageUsageFlags.ColorAttachment;
+
+            if(this.vkQueueFamilies.GraphicsFamily != this.vkQueueFamilies.PresentFamily) {
+                createInfo.ImageSharingMode = Vk.SharingMode.Concurrent;
+                createInfo.QueueFamilyIndexCount = 2;
+                createInfo.QueueFamilyIndices = new uint[] {
+                    this.vkQueueFamilies.GraphicsFamily.Value,
+                    this.vkQueueFamilies.PresentFamily.Value
+                };
+            } else {
+                createInfo.ImageSharingMode = Vk.SharingMode.Exclusive;
+                createInfo.QueueFamilyIndexCount = 0;
+                createInfo.QueueFamilyIndices = null;
+            }
+
+            createInfo.PreTransform = support.capabilities.CurrentTransform;
+            createInfo.CompositeAlpha = Vk.CompositeAlphaFlagsKhr.Opaque; // Blending with other windows? :o
+            createInfo.PresentMode = presentMode;
+            createInfo.Clipped = true;
+            createInfo.OldSwapchain = null;
+
+            try {
+                this.vkSwapchain = this.vkDevice.CreateSwapchainKHR(createInfo);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the swapchain.");
+                Console.Error.WriteLine(result.Result);
+            }
+
+            this.vkSwapchainImages = this.vkDevice.GetSwapchainImagesKHR(this.vkSwapchain);
+        }
+
+        private void CreateImageViews() {
+            this.vkSwapchainImageViews = new Vk.ImageView[this.vkSwapchainImages.Length];
+
+            for(int i = 0; i < this.vkSwapchainImageViews.Length; i++) {
+                Vk.ImageViewCreateInfo createInfo = new Vk.ImageViewCreateInfo();
+                createInfo.Image = this.vkSwapchainImages[i];
+                createInfo.ViewType = Vk.ImageViewType.View2D;
+                createInfo.Format = this.vkSwapchainImageFormat;
+
+                Vk.ComponentMapping componentMapping = new Vk.ComponentMapping();
+                componentMapping.R = Vk.ComponentSwizzle.Identity;
+                componentMapping.G = Vk.ComponentSwizzle.Identity;
+                componentMapping.B = Vk.ComponentSwizzle.Identity;
+                componentMapping.A = Vk.ComponentSwizzle.Identity;
+
+                createInfo.Components = componentMapping;
+
+                Vk.ImageSubresourceRange subresourceRange = new Vk.ImageSubresourceRange();
+                subresourceRange.AspectMask     = Vk.ImageAspectFlags.Color;
+                subresourceRange.BaseMipLevel   = 0;
+                subresourceRange.LevelCount     = 1;
+                subresourceRange.BaseArrayLayer = 0;
+                subresourceRange.LayerCount     = 1;
+
+                createInfo.SubresourceRange = subresourceRange;
+
+                try {
+                    this.vkSwapchainImageViews[i] = this.vkDevice.CreateImageView(createInfo);
+                } catch(Vk.ResultException result) {
+                    Console.Error.WriteLine($"An error occurred while creating image view {i}.");
+                    Console.Error.WriteLine(result.Result);
+                }
             }
         }
 
@@ -243,12 +355,17 @@ namespace Game {
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
+                foreach(Vk.ImageView imageView in this.vkSwapchainImageViews) {
+                    this.vkDevice.DestroyImageView(imageView);
+                }
+
                 this.vkDevice.Destroy();
                 
                 if(this.ShouldUseValidationLayers()) {
                     this.vkInstance.DestroyDebugReportCallbackEXT(this.debugCallback);
                 }
 
+                this.vkDevice.DestroySwapchainKHR(this.vkSwapchain);
                 this.vkDevice.Destroy();
                 this.vkInstance.Dispose();
             }

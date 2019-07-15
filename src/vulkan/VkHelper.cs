@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using Game.Math;
 using GLFW;
 using Vk = Vulkan;
 
@@ -142,7 +143,7 @@ namespace Game.Vulkan {
                     }
 
                     if(device.GetSurfaceSupportKHR(i, surface)) {
-                        queueFamilies.PresentationFamily = i;
+                        queueFamilies.PresentFamily = i;
                     }
 
                     if(queueFamilies.AllFamiliesExist()) {
@@ -169,7 +170,8 @@ namespace Game.Vulkan {
             Type surfaceType = typeof(Vk.SurfaceKhr);
 
             Vk.SurfaceKhr surface = (Vk.SurfaceKhr) FormatterServices.GetUninitializedObject(surfaceType);
-            FieldInfo[] info = surfaceType.GetFields(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            FieldInfo[] info = surfaceType.GetFields(BindingFlags.FlattenHierarchy |
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
             foreach(var i in info) {
                 if(i.Name.Equals("m")) {
@@ -179,6 +181,64 @@ namespace Game.Vulkan {
             }
 
             return surface;
+        }
+
+        public static bool CheckDeviceExtensionSupport(Vk.PhysicalDevice device, IEnumerable<string> extensions) {
+            Vk.ExtensionProperties[] props = device.EnumerateDeviceExtensionProperties();
+
+            return extensions.All<string>((string requiredExtension) => 
+                props.Any<Vk.ExtensionProperties>((Vk.ExtensionProperties extension) => 
+                    extension.ExtensionName.Equals(requiredExtension)
+                )
+            );
+        }
+
+        public static SwapchainSupportDetails QuerySwapchainSupport(Vk.PhysicalDevice device, Vk.SurfaceKhr surface) {
+            SwapchainSupportDetails support = new SwapchainSupportDetails();
+            support.capabilities = device.GetSurfaceCapabilitiesKHR(surface);
+            support.formats      = device.GetSurfaceFormatsKHR(surface);
+            support.presentModes = device.GetSurfacePresentModesKHR(surface);
+
+            return support;
+        }
+
+        public static Vk.SurfaceFormatKhr SelectSwapSurfaceFormat(Vk.SurfaceFormatKhr[] formats) {
+            foreach(Vk.SurfaceFormatKhr format in formats) {
+                if(format.Format == Vk.Format.R8G8B8A8Unorm 
+                    && format.ColorSpace == Vk.ColorSpaceKhr.SrgbNonlinear) {
+                    return format;        
+                }
+            }
+
+            return formats[0];
+        }
+
+        public static Vk.PresentModeKhr SelectSwapPresentMode(Vk.PresentModeKhr[] presentModes) {
+            Vk.PresentModeKhr fallback = Vk.PresentModeKhr.Fifo;
+
+            foreach(Vk.PresentModeKhr presentMode in presentModes) {
+                if(presentMode == Vk.PresentModeKhr.Mailbox) {
+                    return presentMode;
+                } else if(presentMode == Vk.PresentModeKhr.Immediate) {
+                    fallback = presentMode;
+                }
+            }
+
+            return fallback;
+        }
+        
+        public static Vk.Extent2D SelectSwapExtent(Vk.SurfaceCapabilitiesKhr capabilities, 
+                int width, int height) {
+            if(capabilities.CurrentExtent.Width != Int32.MaxValue) {
+                return capabilities.CurrentExtent;
+            } else {
+                Vk.Extent2D actualExtent = new Vk.Extent2D();
+                actualExtent.Width = MathHelper.Clamp(capabilities.MinImageExtent.Width, 
+                        (uint) width, capabilities.MaxImageExtent.Width);
+                actualExtent.Height = MathHelper.Clamp(capabilities.MinImageExtent.Height, 
+                        (uint) height, capabilities.MaxImageExtent.Height);
+                return actualExtent;
+            }
         }
     }
 
@@ -195,10 +255,16 @@ namespace Game.Vulkan {
 
     public struct QueueFamilyIndices {
         public uint? GraphicsFamily;
-        public uint? PresentationFamily;
+        public uint? PresentFamily;
 
         public bool AllFamiliesExist() {
-            return this.GraphicsFamily.HasValue && this.PresentationFamily.HasValue;
+            return this.GraphicsFamily.HasValue && this.PresentFamily.HasValue;
         }
+    }
+
+    public struct SwapchainSupportDetails {
+        public Vk.SurfaceCapabilitiesKhr capabilities;
+        public Vk.SurfaceFormatKhr[]     formats;
+        public Vk.PresentModeKhr[]       presentModes;
     }
 }
