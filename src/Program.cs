@@ -5,6 +5,7 @@ using Game.Math;
 using Game.Physics;
 using Game.Vulkan;
 using Vk = Vulkan;
+using System.Text;
 
 namespace Game {
     public class Program {
@@ -28,6 +29,11 @@ namespace Game {
 
         private Window window;
         private Vk.Instance vkInstance;
+        private Vk.PhysicalDevice vkPhysicalDevice;
+        private Vk.Device vkDevice;
+        private Vk.Queue vkGraphicsQueue;
+        private Vk.DebugReportCallbackExt debugCallback;
+        private uint vkQueueFamilyIndex;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -41,7 +47,7 @@ namespace Game {
         }
 
         private void Run() {
-            this.enableValidationLayers = true;
+            this.enableValidationLayers = false;
 
             this.InitWindow();
             this.InitVulkan();
@@ -82,9 +88,14 @@ namespace Game {
                 this.CreateVulkanInstance();
 
                 if(this.ShouldUseValidationLayers()) {
-                    VkHelper.RegisterDebugReportCallback(this.vkInstance, 
+                    this.debugCallback = VkHelper.RegisterDebugReportCallback(this.vkInstance, 
                         Vk.DebugReportFlagsExt.Debug, this.DebugReportCallback);
                 }
+
+                this.vkPhysicalDevice = VkHelper.SelectPhysicalDevice(this.vkInstance, this.CheckPhysicalDeviceSuitability);
+                this.CreateDevice();
+                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.vkQueueFamilyIndex, 0);
+
             } else {
                 Console.WriteLine("No Vulkan :(");
             }
@@ -114,7 +125,7 @@ namespace Game {
                 this.vkInstance = builder.Create();
             } catch(Vk.ResultException result) {
                 Console.Error.WriteLine("An error occurred while creating the Vulkan instance.");
-                Console.Error.WriteLine(result.Message);
+                Console.Error.WriteLine(result.Result);
             }
         }
 
@@ -138,12 +149,44 @@ namespace Game {
         }
 
         private bool DebugReportCallback(DebugCallbackArgs args) {
-            Console.WriteLine($"Vulkan Debug Call by Layer {args.LayerPrefix}");
-            Console.WriteLine($"Object Type: {args.ObjectType} at {args.Location}");
-            Console.WriteLine($"Flag: {args.Flags}");
-            Console.WriteLine($"{args.MessageCode}: {args.Message}");
+            StringBuilder builder = new StringBuilder();
+            builder.Append($"[{args.Flags}] [{args.LayerPrefix}]");
+            builder.Append($" ");
+            builder.Append($"[{Enum.GetName(args.ObjectType.GetType(), args.ObjectType)} at ({args.Location})]");
+            builder.Append($"{args.Message} ({args.MessageCode})");
+
+            Console.WriteLine(builder.ToString());
 
             return false;
+        }
+
+        private bool CheckPhysicalDeviceSuitability(Vk.PhysicalDevice device) {
+            return VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, Vk.QueueFlags.Graphics, out this.vkQueueFamilyIndex);
+        }
+
+        private void CreateDevice() {
+            LogicalDeviceBuilder builder = new LogicalDeviceBuilder();
+
+            Vk.DeviceQueueCreateInfo queueInfo = new Vk.DeviceQueueCreateInfo();
+            queueInfo.QueueFamilyIndex = this.vkQueueFamilyIndex;
+            queueInfo.QueueCount = 1;
+            queueInfo.QueuePriorities = new float[] { 1.0F };
+
+            builder.EnableQueue(queueInfo);
+
+            // Vk.PhysicalDeviceFeatures deviceFeatures = new Vk.PhysicalDeviceFeatures();
+            // builder.SetFeatures(deviceFeatures);
+            
+            if(this.ShouldUseValidationLayers()) {
+                builder.EnableValidationLayer(VkConstants.VK_LAYER_KHRONOS_vaidation);
+            }
+
+            try {
+                this.vkDevice = builder.Create(this.vkPhysicalDevice);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the logical device.");
+                Console.Error.WriteLine(result.Result);
+            }
         }
 
         private void MainLoop() {
@@ -168,6 +211,12 @@ namespace Game {
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
+                this.vkDevice.Destroy();
+                
+                if(this.ShouldUseValidationLayers()) {
+                    this.vkInstance.DestroyDebugReportCallbackEXT(this.debugCallback);
+                }
+                
                 this.vkInstance.Dispose();
             }
 

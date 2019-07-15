@@ -10,7 +10,7 @@ namespace Game.Vulkan {
          [DllImport(Glfw.LIBRARY, EntryPoint = "glfwGetRequiredInstanceExtensions",
             CallingConvention = CallingConvention.Cdecl)]
         private static extern IntPtr GetRequiredInstanceExtensions(out uint count);
-
+        
         /// <summary>
         ///     This is verbatim <see cref="GLFW.Vulkan.GetRequiredInstanceExtensions" />
         ///     but for whatever reason, calling it through GLFW causes segmentation
@@ -59,8 +59,6 @@ namespace Game.Vulkan {
                         userDataPointer) => {
                 String layerPrefix = Marshal.PtrToStringAuto(layerPrefixPointer);
                 String message     = Marshal.PtrToStringAuto(messagePointer);
-
-                // Deal with UserData later when we actually have some
 
                 DebugCallbackArgs args = new DebugCallbackArgs();
                 args.Flags           = flags;
@@ -112,6 +110,36 @@ namespace Game.Vulkan {
             }
 
             return true;
+        }
+
+        public delegate bool PhysicalDeviceSuitabilityCheck(Vk.PhysicalDevice device);
+
+        public static Vk.PhysicalDevice SelectPhysicalDevice(Vk.Instance instance, PhysicalDeviceSuitabilityCheck check) {
+            Vk.PhysicalDevice[] devices = instance.EnumeratePhysicalDevices();
+
+            foreach(Vk.PhysicalDevice device in devices) {
+                if(check.Invoke(device)) {
+                    return device;
+                }
+            }
+
+            return null;
+        }
+
+        public static bool CheckPhysicalDeviceQueueFamilySupport(Vk.PhysicalDevice device, Vk.QueueFlags flags, out uint queueIndex) {
+            Vk.QueueFamilyProperties[] props = device.GetQueueFamilyProperties();
+            
+            for(uint i = 0; i < props.Length; i++) {
+                Vk.QueueFamilyProperties family = props[i];
+                if(family.QueueFlags.HasFlag(flags) && family.QueueCount > 0) {
+                    queueIndex = i;
+                    
+                    return true;
+                }
+            }
+
+            queueIndex = 0;
+            return false;
         }
     }
 
