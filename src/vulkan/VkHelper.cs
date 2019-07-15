@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 using GLFW;
 using Vk = Vulkan;
 
@@ -114,7 +116,8 @@ namespace Game.Vulkan {
 
         public delegate bool PhysicalDeviceSuitabilityCheck(Vk.PhysicalDevice device);
 
-        public static Vk.PhysicalDevice SelectPhysicalDevice(Vk.Instance instance, PhysicalDeviceSuitabilityCheck check) {
+        public static Vk.PhysicalDevice SelectPhysicalDevice(Vk.Instance instance, 
+                PhysicalDeviceSuitabilityCheck check) {
             Vk.PhysicalDevice[] devices = instance.EnumeratePhysicalDevices();
 
             foreach(Vk.PhysicalDevice device in devices) {
@@ -126,20 +129,56 @@ namespace Game.Vulkan {
             return null;
         }
 
-        public static bool CheckPhysicalDeviceQueueFamilySupport(Vk.PhysicalDevice device, Vk.QueueFlags flags, out uint queueIndex) {
+        public static bool CheckPhysicalDeviceQueueFamilySupport(Vk.PhysicalDevice device, 
+                Vk.QueueFlags flags, Vk.SurfaceKhr surface, out QueueFamilyIndices queueFamilies) {
             Vk.QueueFamilyProperties[] props = device.GetQueueFamilyProperties();
-            
+            queueFamilies = new QueueFamilyIndices();
+
             for(uint i = 0; i < props.Length; i++) {
                 Vk.QueueFamilyProperties family = props[i];
-                if(family.QueueFlags.HasFlag(flags) && family.QueueCount > 0) {
-                    queueIndex = i;
-                    
-                    return true;
+                if(family.QueueCount > 0) {
+                    if(family.QueueFlags.HasFlag(flags)) {
+                        queueFamilies.GraphicsFamily = i;
+                    }
+
+                    if(device.GetSurfaceSupportKHR(i, surface)) {
+                        queueFamilies.PresentationFamily = i;
+                    }
+
+                    if(queueFamilies.AllFamiliesExist()) {
+                        return true;
+                    }
                 }
             }
 
-            queueIndex = 0;
             return false;
+        }
+
+        public static IntPtr InstancePointer(Vk.Instance instance) {
+            return ((Vk.IMarshalling) instance).Handle;
+        }
+
+        /// <summary>
+        ///     VulkanSharp provides no way to make a SurfaceKhr given a pointer
+        ///     to one, so there was no way to use GLFW's Vulkan compatibility
+        ///     surface creation.
+        ///
+        ///     The solution is this awful thing.
+        /// </summary>
+        public static Vk.SurfaceKhr CreateSurfaceFromHandle(IntPtr handle) {
+            Type surfaceType = typeof(Vk.SurfaceKhr);
+
+            Vk.SurfaceKhr surface = (Vk.SurfaceKhr) FormatterServices.GetUninitializedObject(surfaceType);
+            FieldInfo[] info = surfaceType.GetFields(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach(var i in info) {
+                if(i.Name.Equals("m")) {
+                    i.SetValue(surface, (ulong) handle.ToInt64());
+                    break;
+                }
+            }
+
+            return surface;
         }
     }
 
@@ -152,5 +191,14 @@ namespace Game.Vulkan {
         public ulong Object;
         public IntPtr Location;
         public IntPtr UserDataPointer;
+    }
+
+    public struct QueueFamilyIndices {
+        public uint? GraphicsFamily;
+        public uint? PresentationFamily;
+
+        public bool AllFamiliesExist() {
+            return this.GraphicsFamily.HasValue && this.PresentationFamily.HasValue;
+        }
     }
 }

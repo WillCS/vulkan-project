@@ -1,11 +1,14 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using GLFW;
-using OpenGL;
 using Game.Math;
 using Game.Physics;
 using Game.Vulkan;
 using Vk = Vulkan;
 using System.Text;
+using System.Collections.Generic;
+using System.Runtime.Serialization;
+using System.Reflection;
 
 namespace Game {
     public class Program {
@@ -32,8 +35,10 @@ namespace Game {
         private Vk.PhysicalDevice vkPhysicalDevice;
         private Vk.Device vkDevice;
         private Vk.Queue vkGraphicsQueue;
+        private Vk.Queue vkPresentationQueue;
+        private Vk.SurfaceKhr vkSurface;
         private Vk.DebugReportCallbackExt debugCallback;
-        private uint vkQueueFamilyIndex;
+        private QueueFamilyIndices queueFamilies;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -58,7 +63,7 @@ namespace Game {
         private void InitWindow() {
             ErrorCallback errorHandler = (GLFW.ErrorCode ErrorCode, IntPtr message) => {
                 Console.WriteLine(ErrorCode);
-                string errorMsg = System.Runtime.InteropServices.Marshal.PtrToStringAuto(message);
+                string errorMsg = Marshal.PtrToStringAuto(message);
                 Console.WriteLine(errorMsg);
             };
 
@@ -75,7 +80,7 @@ namespace Game {
         }
 
         private void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
-            Window window = System.Runtime.InteropServices.Marshal.PtrToStructure<Window>(windowPointer);
+            Window window = Marshal.PtrToStructure<Window>(windowPointer);
             Console.WriteLine(window == this.window);
             Glfw.MakeContextCurrent(window);
 
@@ -92,9 +97,12 @@ namespace Game {
                         Vk.DebugReportFlagsExt.Debug, this.DebugReportCallback);
                 }
 
+                this.CreateWindowSurface();
+
                 this.vkPhysicalDevice = VkHelper.SelectPhysicalDevice(this.vkInstance, this.CheckPhysicalDeviceSuitability);
                 this.CreateDevice();
-                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.vkQueueFamilyIndex, 0);
+                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.queueFamilies.GraphicsFamily.Value, 0);
+                this.vkPresentationQueue = this.vkDevice.GetQueue(this.queueFamilies.PresentationFamily.Value, 0);
 
             } else {
                 Console.WriteLine("No Vulkan :(");
@@ -125,6 +133,22 @@ namespace Game {
                 this.vkInstance = builder.Create();
             } catch(Vk.ResultException result) {
                 Console.Error.WriteLine("An error occurred while creating the Vulkan instance.");
+                Console.Error.WriteLine(result.Result);
+            }
+        }
+
+        private void CreateWindowSurface() {
+            try {
+                IntPtr allocatorPointer = IntPtr.Zero;
+                IntPtr surfacePointer   = new IntPtr();
+                IntPtr instancePointer  = VkHelper.InstancePointer(this.vkInstance);
+                IntPtr windowPointer    = this.window;
+
+                GLFW.Vulkan.CreateWindowSurface(instancePointer, windowPointer, allocatorPointer, out surfacePointer);
+
+                this.vkSurface = VkHelper.CreateSurfaceFromHandle(surfacePointer);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred creating the window surface.");
                 Console.Error.WriteLine(result.Result);
             }
         }
@@ -161,18 +185,26 @@ namespace Game {
         }
 
         private bool CheckPhysicalDeviceSuitability(Vk.PhysicalDevice device) {
-            return VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, Vk.QueueFlags.Graphics, out this.vkQueueFamilyIndex);
+            return VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, 
+                    Vk.QueueFlags.Graphics, this.vkSurface, out this.queueFamilies);
         }
 
         private void CreateDevice() {
             LogicalDeviceBuilder builder = new LogicalDeviceBuilder();
 
-            Vk.DeviceQueueCreateInfo queueInfo = new Vk.DeviceQueueCreateInfo();
-            queueInfo.QueueFamilyIndex = this.vkQueueFamilyIndex;
-            queueInfo.QueueCount = 1;
-            queueInfo.QueuePriorities = new float[] { 1.0F };
+            HashSet<uint> queueTypes = new HashSet<uint>(new uint[] {
+                this.queueFamilies.GraphicsFamily.Value,
+                this.queueFamilies.PresentationFamily.Value
+            });
 
-            builder.EnableQueue(queueInfo);
+            foreach(uint queueType in queueTypes) {
+                Vk.DeviceQueueCreateInfo queueInfo = new Vk.DeviceQueueCreateInfo();
+                queueInfo.QueueFamilyIndex = queueType;
+                queueInfo.QueueCount = 1;
+                queueInfo.QueuePriorities = new float[] { 1.0F };
+
+                builder.EnableQueue(queueInfo);
+            }
 
             // Vk.PhysicalDeviceFeatures deviceFeatures = new Vk.PhysicalDeviceFeatures();
             // builder.SetFeatures(deviceFeatures);
@@ -216,7 +248,8 @@ namespace Game {
                 if(this.ShouldUseValidationLayers()) {
                     this.vkInstance.DestroyDebugReportCallbackEXT(this.debugCallback);
                 }
-                
+
+                this.vkDevice.Destroy();
                 this.vkInstance.Dispose();
             }
 
