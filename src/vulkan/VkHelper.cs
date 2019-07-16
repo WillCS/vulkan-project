@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using Game.Math;
 using GLFW;
+using System.IO;
 using Vk = Vulkan;
 
 namespace Game.Vulkan {
@@ -155,9 +156,8 @@ namespace Game.Vulkan {
             return false;
         }
 
-        public static IntPtr InstancePointer(Vk.Instance instance) {
-            return ((Vk.IMarshalling) instance).Handle;
-        }
+        public static IntPtr InstancePointer(Vk.Instance instance) =>
+            ((Vk.IMarshalling) instance).Handle;
 
         /// <summary>
         ///     VulkanSharp provides no way to make a SurfaceKhr given a pointer
@@ -239,6 +239,19 @@ namespace Game.Vulkan {
                         (uint) height, capabilities.MaxImageExtent.Height);
                 return actualExtent;
             }
+        }
+
+        public static byte[] LoadShaderCode(string name) {
+            byte[] bytecode = File.ReadAllBytes(name);
+            return bytecode;
+        }
+
+        public static Vk.ShaderModule CreateShaderModule(Vk.Device device, byte[] bytecode) {
+            Vk.ShaderModuleCreateInfo moduleInfo = new Vk.ShaderModuleCreateInfo();
+            moduleInfo.CodeBytes = bytecode;
+            moduleInfo.CodeSize = new UIntPtr((uint) bytecode.Length);
+            
+            return device.CreateShaderModule(moduleInfo);
         }
     }
 

@@ -45,6 +45,9 @@ namespace Game {
         private QueueFamilyIndices vkQueueFamilies;
         private Vk.Format vkSwapchainImageFormat;
         private Vk.Extent2D vkSwapchainExtent;
+        private Vk.RenderPass vkRenderPass;
+        private Vk.PipelineLayout vkPipelineLayout;
+        private Vk.Pipeline[] vkPipelines;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -114,6 +117,7 @@ namespace Game {
 
                 this.CreateSwapchain();
                 this.CreateImageViews();
+                this.CreateRenderPass();
                 this.CreateGraphicsPipeline();
             } else {
                 Console.WriteLine("No Vulkan :(");
@@ -334,8 +338,177 @@ namespace Game {
             }
         }
 
-        private void CreateGraphicsPipeline() {
+        private void CreateRenderPass() {
+            var colourAttachment = new Vk.AttachmentDescription();
+            colourAttachment.Format         = this.vkSwapchainImageFormat;
+            colourAttachment.Samples        = Vk.SampleCountFlags.Count1;
+            colourAttachment.LoadOp         = Vk.AttachmentLoadOp.Clear;
+            colourAttachment.StoreOp        = Vk.AttachmentStoreOp.Store;
+            colourAttachment.StencilLoadOp  = Vk.AttachmentLoadOp.DontCare;
+            colourAttachment.StencilStoreOp = Vk.AttachmentStoreOp.DontCare;
+            colourAttachment.InitialLayout  = Vk.ImageLayout.Undefined;
+            colourAttachment.FinalLayout    = Vk.ImageLayout.PresentSrcKhr;
 
+            var colourAttachments = new Vk.AttachmentDescription[] {
+                colourAttachment
+            };
+
+            var colourAttachmentRef = new Vk.AttachmentReference();
+            colourAttachmentRef.Attachment = 0;
+            colourAttachmentRef.Layout     = Vk.ImageLayout.ColorAttachmentOptimal;
+
+            var colourAttachmentRefs = new Vk.AttachmentReference[] {
+                colourAttachmentRef
+            };
+
+            var subpass = new Vk.SubpassDescription();
+            subpass.PipelineBindPoint    = Vk.PipelineBindPoint.Graphics;
+            subpass.ColorAttachmentCount = 1;
+            subpass.ColorAttachments     = colourAttachmentRefs;
+
+            var subpasses = new Vk.SubpassDescription[] {
+                subpass
+            };
+
+            var renderPassInfo = new Vk.RenderPassCreateInfo();
+            renderPassInfo.AttachmentCount = 1;
+            renderPassInfo.Attachments     = colourAttachments;
+            renderPassInfo.SubpassCount    = 1;
+            renderPassInfo.Subpasses       = subpasses;
+
+            try {
+                this.vkRenderPass = this.vkDevice.CreateRenderPass(renderPassInfo);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating a render pass.");
+                Console.Error.WriteLine(result.Result);
+            }
+        }
+
+        private void CreateGraphicsPipeline() {
+            byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
+            byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
+
+            Vk.ShaderModule fragModule = VkHelper.CreateShaderModule(this.vkDevice, fragBytecode);
+            Vk.ShaderModule vertModule = VkHelper.CreateShaderModule(this.vkDevice, vertBytecode);
+
+            var vertShaderStageInfo = new Vk.PipelineShaderStageCreateInfo();
+            vertShaderStageInfo.Stage  = Vk.ShaderStageFlags.Vertex;
+            vertShaderStageInfo.Module = vertModule;
+            vertShaderStageInfo.Name   = "main";
+
+            var fragShaderStageInfo = new Vk.PipelineShaderStageCreateInfo();
+            fragShaderStageInfo.Stage  = Vk.ShaderStageFlags.Fragment;
+            fragShaderStageInfo.Module = fragModule;
+            fragShaderStageInfo.Name   = "main";
+
+            var shaderStageInfos = new Vk.PipelineShaderStageCreateInfo[] {
+                vertShaderStageInfo,
+                fragShaderStageInfo
+            };
+
+            var vertexInputInfo = new Vk.PipelineVertexInputStateCreateInfo();
+            vertexInputInfo.VertexBindingDescriptionCount   = 0;
+            vertexInputInfo.VertexAttributeDescriptionCount = 0;
+
+            var inputAssemblyInfo = new Vk.PipelineInputAssemblyStateCreateInfo();
+            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleList;
+            inputAssemblyInfo.PrimitiveRestartEnable = false;
+
+            Vk.Viewport viewport = new Vk.Viewport();
+            viewport.X           = 0.0F;
+            viewport.Y           = 0.0F;
+            viewport.Width       = (float) this.vkSwapchainExtent.Width;
+            viewport.Height      = (float) this.vkSwapchainExtent.Height;
+            viewport.MinDepth    = 0.0F;
+            viewport.MaxDepth    = 1.0F;
+
+            Vk.Rect2D scissorRect = new Vk.Rect2D();
+            scissorRect.Offset.X  = 0;
+            scissorRect.Offset.Y  = 0;
+            scissorRect.Extent    = this.vkSwapchainExtent;
+
+            var viewportStateInfo = new Vk.PipelineViewportStateCreateInfo();
+            viewportStateInfo.ViewportCount = 1;
+            viewportStateInfo.Viewports     = new Vk.Viewport[] { viewport };
+            viewportStateInfo.ScissorCount  = 1;
+            viewportStateInfo.Scissors      = new Vk.Rect2D[] { scissorRect };
+
+            var rasteriserInfo = new Vk.PipelineRasterizationStateCreateInfo();
+            rasteriserInfo.DepthClampEnable        = false;
+            rasteriserInfo.RasterizerDiscardEnable = false;
+            rasteriserInfo.PolygonMode             = Vk.PolygonMode.Fill;
+            rasteriserInfo.LineWidth               = 1.0F;
+            rasteriserInfo.CullMode                = Vk.CullModeFlags.Back;
+            rasteriserInfo.FrontFace               = Vk.FrontFace.Clockwise;
+            rasteriserInfo.DepthBiasEnable         = false;
+
+            var multisamplingInfo = new Vk.PipelineMultisampleStateCreateInfo();
+            multisamplingInfo.SampleShadingEnable = false;
+            multisamplingInfo.RasterizationSamples = Vk.SampleCountFlags.Count1;
+
+            var colourBlendAttachmentInfo = new Vk.PipelineColorBlendAttachmentState();
+            colourBlendAttachmentInfo.ColorWriteMask = 
+                Vk.ColorComponentFlags.R | 
+                Vk.ColorComponentFlags.G | 
+                Vk.ColorComponentFlags.B | 
+                Vk.ColorComponentFlags.A;
+            colourBlendAttachmentInfo.BlendEnable         = true;
+            colourBlendAttachmentInfo.SrcColorBlendFactor = Vk.BlendFactor.SrcAlpha;
+            colourBlendAttachmentInfo.DstColorBlendFactor = Vk.BlendFactor.OneMinusSrcAlpha;
+            colourBlendAttachmentInfo.ColorBlendOp        = Vk.BlendOp.Add;
+            colourBlendAttachmentInfo.SrcAlphaBlendFactor = Vk.BlendFactor.One;
+            colourBlendAttachmentInfo.DstAlphaBlendFactor = Vk.BlendFactor.Zero;
+            colourBlendAttachmentInfo.AlphaBlendOp        = Vk.BlendOp.Add;
+
+            var colourBlendAttachmentInfos = new Vk.PipelineColorBlendAttachmentState[] {
+                colourBlendAttachmentInfo
+            };
+
+            var colourBlendStateInfo = new Vk.PipelineColorBlendStateCreateInfo();
+            colourBlendStateInfo.LogicOpEnable   = false;
+            colourBlendStateInfo.LogicOp         = Vk.LogicOp.Copy;
+            colourBlendStateInfo.AttachmentCount = 1;
+            colourBlendStateInfo.Attachments     = colourBlendAttachmentInfos;
+
+            var pipelineLayoutInfo = new Vk.PipelineLayoutCreateInfo();
+            
+            try {
+                this.vkPipelineLayout = this.vkDevice.CreatePipelineLayout(pipelineLayoutInfo);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the pipeline layout.");
+                Console.Error.WriteLine(result.Result);
+            }
+
+            var pipelineInfo = new Vk.GraphicsPipelineCreateInfo();
+            pipelineInfo.StageCount         = 2;
+            pipelineInfo.Stages             = shaderStageInfos;
+            pipelineInfo.VertexInputState   = vertexInputInfo;
+            pipelineInfo.InputAssemblyState = inputAssemblyInfo;
+            pipelineInfo.ViewportState      = viewportStateInfo;
+            pipelineInfo.RasterizationState = rasteriserInfo;
+            pipelineInfo.MultisampleState   = multisamplingInfo;
+            pipelineInfo.DepthStencilState  = null;
+            pipelineInfo.ColorBlendState    = colourBlendStateInfo;
+            pipelineInfo.DynamicState       = null;
+            pipelineInfo.Layout             = this.vkPipelineLayout;
+            pipelineInfo.RenderPass         = this.vkRenderPass;
+            pipelineInfo.Subpass            = 0;
+            pipelineInfo.BasePipelineHandle = null;
+            pipelineInfo.BasePipelineIndex  = -1;
+
+            var pipelineInfos = new Vk.GraphicsPipelineCreateInfo[] {
+                pipelineInfo
+            };
+
+            try {
+                this.vkPipelines = this.vkDevice.CreateGraphicsPipelines(null, pipelineInfos);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the graphics pipeline.");
+                Console.Error.WriteLine(result.Result);
+            }
+
+            this.vkDevice.DestroyShaderModule(fragModule);
+            this.vkDevice.DestroyShaderModule(vertModule);
         }
 
         private void MainLoop() {
@@ -364,6 +537,12 @@ namespace Game {
                     this.vkDevice.DestroyImageView(imageView);
                 }
 
+                foreach(Vk.Pipeline pipeline in this.vkPipelines) {
+                    this.vkDevice.DestroyPipeline(pipeline);
+                }
+
+                this.vkDevice.DestroyPipelineLayout(this.vkPipelineLayout);
+                this.vkDevice.DestroyRenderPass(this.vkRenderPass);
                 this.vkDevice.Destroy();
                 
                 if(this.ShouldUseValidationLayers()) {
