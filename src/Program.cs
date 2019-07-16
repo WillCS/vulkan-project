@@ -48,6 +48,7 @@ namespace Game {
         private Vk.RenderPass vkRenderPass;
         private Vk.PipelineLayout vkPipelineLayout;
         private Vk.Pipeline[] vkPipelines;
+        private Vk.Framebuffer[] vkSwapchainFramebuffers;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -119,6 +120,7 @@ namespace Game {
                 this.CreateImageViews();
                 this.CreateRenderPass();
                 this.CreateGraphicsPipeline();
+                this.CreateFramebuffers();
             } else {
                 Console.WriteLine("No Vulkan :(");
             }
@@ -511,6 +513,31 @@ namespace Game {
             this.vkDevice.DestroyShaderModule(vertModule);
         }
 
+        private void CreateFramebuffers() {
+            this.vkSwapchainFramebuffers = new Vk.Framebuffer[this.vkSwapchainImageViews.Length];
+
+            for(uint i = 0; i < this.vkSwapchainImageViews.Length; i++) {
+                Vk.ImageView[] attachments = new Vk.ImageView[] {
+                    this.vkSwapchainImageViews[i]
+                };
+
+                var framebufferInfo = new Vk.FramebufferCreateInfo();
+                framebufferInfo.RenderPass      = this.vkRenderPass;
+                framebufferInfo.AttachmentCount = 1;
+                framebufferInfo.Attachments     = attachments;
+                framebufferInfo.Width           = this.vkSwapchainExtent.Width;
+                framebufferInfo.Height          = this.vkSwapchainExtent.Height;
+                framebufferInfo.Layers          = 1;
+
+                try {
+                    this.vkSwapchainFramebuffers[i] = this.vkDevice.CreateFramebuffer(framebufferInfo);
+                } catch (Vk.ResultException result) {
+                    Console.Error.WriteLine($"An error occurred while creating framebuffer {i}.");
+                    Console.Error.WriteLine(result.Result);
+                }
+            }
+        }
+
         private void MainLoop() {
             while(!Glfw.WindowShouldClose(this.window)) {
                 double currentTime = Glfw.Time;
@@ -533,6 +560,10 @@ namespace Game {
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
+                foreach(Vk.Framebuffer framebuffer in this.vkSwapchainFramebuffers) {
+                    this.vkDevice.DestroyFramebuffer(framebuffer);
+                }
+
                 foreach(Vk.ImageView imageView in this.vkSwapchainImageViews) {
                     this.vkDevice.DestroyImageView(imageView);
                 }
