@@ -114,6 +114,7 @@ namespace Game {
 
                 this.CreateSwapchain();
                 this.CreateImageViews();
+                this.CreateGraphicsPipeline();
             } else {
                 Console.WriteLine("No Vulkan :(");
             }
@@ -331,6 +332,10 @@ namespace Game {
                     Console.Error.WriteLine(result.Result);
                 }
             }
+        }
+
+        private void CreateGraphicsPipeline() {
+
         }
 
         private void MainLoop() {
