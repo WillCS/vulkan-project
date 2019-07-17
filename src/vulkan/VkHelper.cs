@@ -250,7 +250,7 @@ namespace Game.Vulkan {
             Vk.ShaderModuleCreateInfo moduleInfo = new Vk.ShaderModuleCreateInfo();
             moduleInfo.CodeBytes = bytecode;
             moduleInfo.CodeSize = new UIntPtr((uint) bytecode.Length);
-            
+
             return device.CreateShaderModule(moduleInfo);
         }
     }

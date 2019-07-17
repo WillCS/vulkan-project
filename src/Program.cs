@@ -31,12 +31,14 @@ namespace Game {
         private static int TICK_RATE = 60;
         private static double TICK_TIME = 1.0 / TICK_RATE;
 
+        private static int MAX_FRAMES_IN_FLIGHT = 2;
+
         private Window window;
         private Vk.Instance vkInstance;
         private Vk.PhysicalDevice vkPhysicalDevice;
         private Vk.Device vkDevice;
         private Vk.Queue vkGraphicsQueue;
-        private Vk.Queue vkPresentationQueue;
+        private Vk.Queue vkPresentQueue;
         private Vk.SurfaceKhr vkSurface;
         private Vk.SwapchainKhr vkSwapchain;
         private Vk.DebugReportCallbackExt debugCallback;
@@ -49,6 +51,13 @@ namespace Game {
         private Vk.PipelineLayout vkPipelineLayout;
         private Vk.Pipeline[] vkPipelines;
         private Vk.Framebuffer[] vkSwapchainFramebuffers;
+        private Vk.CommandPool vkCommandPool;
+        private Vk.CommandBuffer[] vkCommandBuffers;
+        private Vk.Semaphore[] vkImageAvailableSemaphores;
+        private Vk.Semaphore[] vkRenderFinishedSemaphores;
+        private Vk.Fence[] vkInFlightFences;
+
+        private int currentFrame = 0;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -82,7 +91,6 @@ namespace Game {
             Glfw.Init();
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.None);
             Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
-
             
             this.timeLastLoop = Glfw.Time;
 
@@ -90,10 +98,6 @@ namespace Game {
         }
 
         private void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
-            Window window = Marshal.PtrToStructure<Window>(windowPointer);
-            Console.WriteLine(window == this.window);
-            Glfw.MakeContextCurrent(window);
-
             // Change this to Vulkan mmkay
             // Gl.Viewport(0, 0, width, height);
         }
@@ -113,20 +117,20 @@ namespace Game {
 
                 this.CreateLogicalDevice();
 
-                this.vkGraphicsQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
-                this.vkPresentationQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
+                this.vkGraphicsQueue     = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
+                this.vkPresentQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
 
                 this.CreateSwapchain();
                 this.CreateImageViews();
                 this.CreateRenderPass();
                 this.CreateGraphicsPipeline();
                 this.CreateFramebuffers();
+                this.CreateCommandPool();
+                this.CreateCommandBuffers();
+                this.CreateSyncObjects();
             } else {
                 Console.WriteLine("No Vulkan :(");
             }
-
-            //Glfw.MakeContextCurrent(this.window);
-            //Glfw.SetFramebufferSizeCallback(this.window, this.SetFrameBufferSize);
         }
 
         private void CreateVulkanInstance() {
@@ -303,6 +307,7 @@ namespace Game {
             }
 
             this.vkSwapchainImages = this.vkDevice.GetSwapchainImagesKHR(this.vkSwapchain);
+            this.vkSwapchainExtent = extent;
         }
 
         private void CreateImageViews() {
@@ -351,32 +356,38 @@ namespace Game {
             colourAttachment.InitialLayout  = Vk.ImageLayout.Undefined;
             colourAttachment.FinalLayout    = Vk.ImageLayout.PresentSrcKhr;
 
-            var colourAttachments = new Vk.AttachmentDescription[] {
-                colourAttachment
-            };
-
             var colourAttachmentRef = new Vk.AttachmentReference();
             colourAttachmentRef.Attachment = 0;
             colourAttachmentRef.Layout     = Vk.ImageLayout.ColorAttachmentOptimal;
 
-            var colourAttachmentRefs = new Vk.AttachmentReference[] {
-                colourAttachmentRef
-            };
-
             var subpass = new Vk.SubpassDescription();
             subpass.PipelineBindPoint    = Vk.PipelineBindPoint.Graphics;
             subpass.ColorAttachmentCount = 1;
-            subpass.ColorAttachments     = colourAttachmentRefs;
-
-            var subpasses = new Vk.SubpassDescription[] {
-                subpass
+            subpass.ColorAttachments     = new Vk.AttachmentReference[] {
+                colourAttachmentRef
             };
+
+            var subpassDep = new Vk.SubpassDependency();
+            subpassDep.SrcSubpass    = VkConstants.VK_SUBPASS_EXTERNAL;
+            subpassDep.DstSubpass    = 0;
+            subpassDep.SrcStageMask  = Vk.PipelineStageFlags.ColorAttachmentOutput;
+            subpassDep.DstStageMask  = Vk.PipelineStageFlags.ColorAttachmentOutput;
+            subpassDep.SrcAccessMask = 0;
+            subpassDep.DstAccessMask = Vk.AccessFlags.ColorAttachmentRead | Vk.AccessFlags.ColorAttachmentWrite;
 
             var renderPassInfo = new Vk.RenderPassCreateInfo();
             renderPassInfo.AttachmentCount = 1;
-            renderPassInfo.Attachments     = colourAttachments;
+            renderPassInfo.Attachments     = new Vk.AttachmentDescription[] {
+                colourAttachment
+            };
             renderPassInfo.SubpassCount    = 1;
-            renderPassInfo.Subpasses       = subpasses;
+            renderPassInfo.Subpasses       = new Vk.SubpassDescription[] {
+                subpass
+            };
+            renderPassInfo.DependencyCount = 1;
+            renderPassInfo.Dependencies    = new Vk.SubpassDependency[] {
+                subpassDep
+            };
 
             try {
                 this.vkRenderPass = this.vkDevice.CreateRenderPass(renderPassInfo);
@@ -538,6 +549,98 @@ namespace Game {
             }
         }
 
+        private void CreateCommandPool() {
+            var poolInfo = new Vk.CommandPoolCreateInfo();
+            poolInfo.QueueFamilyIndex = this.vkQueueFamilies.GraphicsFamily.Value;
+
+            try {
+                this.vkCommandPool = this.vkDevice.CreateCommandPool(poolInfo);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the command pool.");
+                Console.Error.WriteLine(result.Result);
+            }
+        }
+
+        private void CreateCommandBuffers() {
+            var allocInfo = new Vk.CommandBufferAllocateInfo();
+            allocInfo.CommandPool        = this.vkCommandPool;
+            allocInfo.Level              = Vk.CommandBufferLevel.Primary;
+            allocInfo.CommandBufferCount = (uint) this.vkSwapchainFramebuffers.Length;
+
+            try {
+                this.vkCommandBuffers = this.vkDevice.AllocateCommandBuffers(allocInfo);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error occurred while creating the command buffers.");
+                Console.Error.WriteLine(result.Result);
+            }
+
+            for(int i = 0; i < this.vkCommandBuffers.Length; i++) {
+                Vk.CommandBuffer buffer = this.vkCommandBuffers[i];
+                var beginInfo = new Vk.CommandBufferBeginInfo();
+                beginInfo.Flags = Vk.CommandBufferUsageFlags.SimultaneousUse;
+
+                try {
+                    buffer.Begin(beginInfo);
+                } catch(Vk.ResultException result) {
+                    Console.Error.WriteLine($"An error occurred while beginning recording for command buffer {i}.");
+                    Console.Error.WriteLine(result.Result);
+                }
+
+                var renderPassInfo = new Vk.RenderPassBeginInfo();
+                renderPassInfo.RenderPass  = this.vkRenderPass;
+                renderPassInfo.Framebuffer = this.vkSwapchainFramebuffers[i];
+
+                var clearColour  = new Vk.ClearValue();
+                var renderArea   = new Vk.Rect2D();
+
+                clearColour.Color        = new Vk.ClearColorValue(new float[] { 0.0F, 0.0F, 0.0F, 1.0F });
+
+                renderArea.Extent.Width  = this.vkSwapchainExtent.Width;
+                renderArea.Extent.Height = this.vkSwapchainExtent.Height;
+                renderArea.Offset.X      = 0;
+                renderArea.Offset.Y      = 0;
+
+                renderPassInfo.RenderArea      = renderArea;
+                renderPassInfo.ClearValueCount = 1;
+                renderPassInfo.ClearValues     = new Vk.ClearValue[] {
+                    clearColour
+                };
+
+                this.vkCommandBuffers[i].CmdBeginRenderPass(renderPassInfo, Vk.SubpassContents.Inline);
+                this.vkCommandBuffers[i].CmdBindPipeline(Vk.PipelineBindPoint.Graphics, this.vkPipelines[0]);
+                this.vkCommandBuffers[i].CmdDraw(3, 1, 0, 0);
+                this.vkCommandBuffers[i].CmdEndRenderPass();
+
+                try {
+                    this.vkCommandBuffers[i].End();
+                } catch(Vk.ResultException result) {
+                    Console.Error.WriteLine($"An error occurred while recording for command buffer {i}.");
+                    Console.Error.WriteLine(result.Result);
+                }
+            }
+        }
+
+        private void CreateSyncObjects() {
+            this.vkImageAvailableSemaphores = new Vk.Semaphore[MAX_FRAMES_IN_FLIGHT];
+            this.vkRenderFinishedSemaphores = new Vk.Semaphore[MAX_FRAMES_IN_FLIGHT];
+            this.vkInFlightFences           = new Vk.Fence[MAX_FRAMES_IN_FLIGHT];
+
+            var semaphoreInfo = new Vk.SemaphoreCreateInfo();
+            var fenceInfo     = new Vk.FenceCreateInfo();
+            fenceInfo.Flags   = Vk.FenceCreateFlags.Signaled;
+
+            for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                try {
+                    this.vkImageAvailableSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
+                    this.vkRenderFinishedSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
+                    this.vkInFlightFences[i]           = this.vkDevice.CreateFence(fenceInfo);
+                } catch(Vk.ResultException result) {
+                    Console.Error.WriteLine("An error has occurred while creating sync objects.");
+                    Console.Error.WriteLine(result.Result);
+                }
+            }
+        }
+
         private void MainLoop() {
             while(!Glfw.WindowShouldClose(this.window)) {
                 double currentTime = Glfw.Time;
@@ -555,11 +658,70 @@ namespace Game {
                 }
 
                 Glfw.PollEvents();
+
+                this.DrawFrame();
+                this.currentFrame = (this.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
             }
+
+            this.vkDevice.WaitIdle();
+        }
+
+        private void DrawFrame() {
+            this.vkDevice.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
+            this.vkDevice.ResetFence(this.vkInFlightFences[this.currentFrame]);
+
+            uint imageIndex = this.vkDevice.AcquireNextImageKHR(this.vkSwapchain, 
+                    UInt64.MaxValue, this.vkImageAvailableSemaphores[this.currentFrame]);
+
+            var waitSemaphores   = new Vk.Semaphore[] { this.vkImageAvailableSemaphores[this.currentFrame] };
+            var signalSemaphores = new Vk.Semaphore[] { this.vkRenderFinishedSemaphores[this.currentFrame] };
+
+            var submitInfo = new Vk.SubmitInfo();
+            submitInfo.CommandBufferCount = 1;
+            submitInfo.WaitSemaphoreCount = 1;
+            submitInfo.SignalSemaphoreCount = 1;
+
+            submitInfo.CommandBuffers = new Vk.CommandBuffer[] {
+                this.vkCommandBuffers[imageIndex]
+            };
+            submitInfo.WaitSemaphores = waitSemaphores;
+            submitInfo.WaitDstStageMask = new Vk.PipelineStageFlags[] {
+                Vk.PipelineStageFlags.ColorAttachmentOutput
+            };
+            submitInfo.SignalSemaphores = signalSemaphores;
+
+            try {
+                this.vkGraphicsQueue.Submit(new Vk.SubmitInfo[] { submitInfo }, 
+                        this.vkInFlightFences[this.currentFrame]);
+            } catch(Vk.ResultException result) {
+                Console.Error.WriteLine("An error has occurred while submitting a command buffer.");
+                Console.Error.WriteLine(result.Result);
+            }
+
+            var presentInfo = new Vk.PresentInfoKhr();
+            presentInfo.WaitSemaphoreCount = 1;
+            presentInfo.WaitSemaphores     = signalSemaphores;
+            presentInfo.SwapchainCount     = 1;
+            presentInfo.Swapchains         = new Vk.SwapchainKhr[] { 
+                this.vkSwapchain
+            };
+            presentInfo.ImageIndices       = new uint[] {
+                imageIndex
+            };
+
+            this.vkPresentQueue.PresentKHR(presentInfo);
         }
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
+                for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                    this.vkDevice.DestroySemaphore(this.vkImageAvailableSemaphores[i]);
+                    this.vkDevice.DestroySemaphore(this.vkRenderFinishedSemaphores[i]);
+                    this.vkDevice.DestroyFence(this.vkInFlightFences[i]);
+                }
+
+                this.vkDevice.DestroyCommandPool(this.vkCommandPool);
+
                 foreach(Vk.Framebuffer framebuffer in this.vkSwapchainFramebuffers) {
                     this.vkDevice.DestroyFramebuffer(framebuffer);
                 }
