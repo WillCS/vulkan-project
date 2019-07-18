@@ -1,3 +1,8 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace Game.Math {
     public class Matrix2 {
 
@@ -117,5 +122,136 @@ namespace Game.Math {
         #endregion OperatorOverloads
 
         #endregion StaticFunctions
+    }
+
+    public class Matrix : IEnumerable<double> {
+        private int rows;
+        private int columns;
+
+        /// <summary>
+        ///     Elements of the matrix are stored in row major order
+        /// </summary>
+        private double[] elements;
+
+        public Matrix(int rows, int columns) {
+            this.rows = rows;
+            this.columns = columns;
+            this.elements = new double[rows * columns];
+        }
+
+        public Matrix(int rows, int columns, IEnumerable<double> elements) {
+            if(rows * columns != elements.Count()) {
+                throw new Exception();
+            }
+
+            this.rows = rows;
+            this.columns = columns;
+            this.elements = elements.ToArray();
+        }
+
+        public int Rows {
+            get => this.rows;
+        }
+
+        public int Columns {
+            get => this.columns;
+        }
+
+        public bool IsSquare {
+            get => this.rows == this.columns;
+        }
+
+        public double this[int row, int column] {
+            get {
+                if(row >= this.rows || column >= this.columns) {
+                    throw new System.IndexOutOfRangeException();
+                }
+
+                return this.elements[this.columns * row + column];
+            }
+
+            set {
+                if(row >= this.rows || column >= this.columns) {
+                    throw new System.IndexOutOfRangeException();
+                }
+
+                this.elements[this.columns * row + column] = value;
+            }
+        }
+
+        public Matrix GetRow(int row) {
+            if(row >= this.rows) {
+                throw new System.IndexOutOfRangeException();
+            }
+
+            Matrix rowVector = new Matrix(1, this.columns);
+            for(int i = 0; i < this.columns; i++) {
+                rowVector[0, i] = this[row, i];
+            }
+
+            return rowVector;
+        }
+
+        public Matrix GetColumn(int column) {
+            if(column >= this.columns) {
+                throw new System.IndexOutOfRangeException();
+            }
+
+            Matrix columnVector = new Matrix(this.rows, 1);
+            for(int i = 0; i < this.rows; i++) {
+                columnVector[i, 0] = this[i, column];
+            }
+
+            return columnVector;
+        }
+
+        public static Matrix operator +(Matrix m1, Matrix m2) {
+            if(m1.Rows != m2.Rows || m1.Columns != m2.Columns) {
+                throw new Exception();
+            }
+
+            return new Matrix(m1.Rows, m1.Columns,
+                    m1.Zip(m2, (double e1, double e2) => e1 + e2).ToArray());
+        }
+
+        public static Matrix operator -(Matrix m) =>
+            new Matrix(m.Rows, m.Columns,
+                    m.Select((double e, int i) => -e).ToArray());
+
+        public static Matrix operator -(Matrix m1, Matrix m2) =>
+            m1 + (-m2);
+
+        public static Matrix operator *(double s, Matrix m) =>
+            new Matrix(m.Rows, m.Columns, 
+                    m.Select((double e, int i) => s * e).ToArray());
+
+        public static Matrix operator *(Matrix m, double s) =>
+            s * m;
+
+        public static Matrix operator /(Matrix m, double s) =>
+            m * (1.0 / s);
+
+        public static Matrix operator *(Matrix m1, Matrix m2) {
+            if(m1.Columns != m2.Rows) {
+                throw new Exception();
+            }
+
+            Matrix newMatrix = new Matrix(m1.Rows, m2.Columns);
+
+            for(int i = 0; i < m1.Rows; i++) {
+                for(int j = 0; j < m2.Columns; j++) {
+                    newMatrix[i, j] = m1.GetRow(i).Zip(
+                        m2.GetColumn(j), (e1, e2) => e1 * e1).Sum();
+                }
+            }
+
+            return newMatrix;
+        }
+
+        public IEnumerator<double> GetEnumerator() => 
+            this.elements.AsEnumerable().GetEnumerator();
+
+        IEnumerator IEnumerable.GetEnumerator() =>
+            this.GetEnumerator();
     }
 }

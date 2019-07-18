@@ -3,3 +3,4 @@
 omnisharp\.json
 *\.spv
 \.vscode
+*\.vktrace

@@ -280,6 +280,8 @@ namespace Game {
             createInfo.ImageArrayLayers = 1;
             createInfo.ImageUsage       = Vk.ImageUsageFlags.ColorAttachment;
 
+            this.vkSwapchainImageFormat = format.Format;
+
             if(this.vkQueueFamilies.GraphicsFamily != this.vkQueueFamilies.PresentFamily) {
                 createInfo.ImageSharingMode = Vk.SharingMode.Concurrent;
                 createInfo.QueueFamilyIndexCount = 2;
