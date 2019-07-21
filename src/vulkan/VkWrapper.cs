@@ -189,8 +189,7 @@ namespace Game.Vulkan {
             try {
                 this.vkDevice = builder.Create(this.vkPhysicalDevice);
             } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the logical device.");
-                Console.Error.WriteLine(result.Result);
+                this.error(result, "An error occurred while creating the logical device.");
             }
         }
 
@@ -555,8 +554,7 @@ namespace Game.Vulkan {
                 try {
                     buffer.Begin(beginInfo);
                 } catch(Vk.ResultException result) {
-                    Console.Error.WriteLine($"An error occurred while beginning recording for command buffer {i}.");
-                    Console.Error.WriteLine(result.Result);
+                    this.error(result, $"An error occurred while beginning recording for command buffer {i}.");
                 }
 
                 var renderPassInfo = new Vk.RenderPassBeginInfo();
@@ -628,8 +626,7 @@ namespace Game.Vulkan {
                     this.createSwapchainPipeline();
                     return;
                 } else {
-                    Console.Error.WriteLine("An error occurred while acquiring a swapchain image.");
-                    Console.Error.WriteLine(result.Result);
+                    this.error(result, "An error occurred while acquiring a swapchain image.");
                 }
             }
 
@@ -657,8 +654,7 @@ namespace Game.Vulkan {
                 this.vkGraphicsQueue.Submit(new Vk.SubmitInfo[] { submitInfo }, 
                         this.vkInFlightFences[this.currentFrame]);
             } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error has occurred while submitting a command buffer.");
-                Console.Error.WriteLine(result.Result);
+                this.error(result, "An error has occurred while submitting a command buffer.");
             }
 
             var presentInfo = new Vk.PresentInfoKhr();
@@ -682,8 +678,7 @@ namespace Game.Vulkan {
                     this.createSwapchainPipeline();
                     Program.RESIZED = false;
                 } else {
-                    Console.Error.WriteLine("An error occurred while presenting an image.");
-                    Console.Error.WriteLine(result.Result);
+                    this.error(result, "An error occurred while presenting an image.");
                 }
             }
         }
