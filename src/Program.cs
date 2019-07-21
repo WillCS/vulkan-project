@@ -25,8 +25,9 @@ namespace Game {
             VkConstants.VK_EXT_debug_report
         };
 
-        public static int WIDTH = 400;
-        public static int HEIGHT = 400;
+        public static int WIDTH = 640;
+        public static int HEIGHT = 480;
+        private static bool framebufferResized = false;
         
         private static int TICK_RATE = 60;
         private static double TICK_TIME = 1.0 / TICK_RATE;
@@ -59,6 +60,8 @@ namespace Game {
 
         private int currentFrame = 0;
 
+        private bool swapchainCleanedUp = true;
+
         private double timeLastLoop = 0;
         private double accumulator = 0;
 
@@ -80,13 +83,11 @@ namespace Game {
         }
 
         private void InitWindow() {
-            ErrorCallback errorHandler = (GLFW.ErrorCode ErrorCode, IntPtr message) => {
+            Glfw.SetErrorCallback((GLFW.ErrorCode ErrorCode, IntPtr message) => {
                 Console.WriteLine(ErrorCode);
                 string errorMsg = Marshal.PtrToStringAuto(message);
                 Console.WriteLine(errorMsg);
-            };
-
-            Glfw.SetErrorCallback(errorHandler);
+            });
 
             Glfw.Init();
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.None);
@@ -95,11 +96,13 @@ namespace Game {
             this.timeLastLoop = Glfw.Time;
 
             this.window = Glfw.CreateWindow(WIDTH, HEIGHT, "Vulkan", Monitor.None, Window.None);
+            Glfw.SetFramebufferSizeCallback(this.window, SetFrameBufferSize);
         }
 
-        private void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
-            // Change this to Vulkan mmkay
-            // Gl.Viewport(0, 0, width, height);
+        private static void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
+            Program.framebufferResized = true;
+            WIDTH = width;
+            HEIGHT = height;
         }
 
         private void InitVulkan() {
@@ -120,13 +123,8 @@ namespace Game {
                 this.vkGraphicsQueue     = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
                 this.vkPresentQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
 
-                this.CreateSwapchain();
-                this.CreateImageViews();
-                this.CreateRenderPass();
-                this.CreateGraphicsPipeline();
-                this.CreateFramebuffers();
-                this.CreateCommandPool();
-                this.CreateCommandBuffers();
+                this.RecreateSwapchain();
+
                 this.CreateSyncObjects();
             } else {
                 Console.WriteLine("No Vulkan :(");
@@ -259,11 +257,29 @@ namespace Game {
             }
         }
 
+        private void RecreateSwapchain() {
+            if(!this.swapchainCleanedUp) {
+                this.CleanupSwapchain();
+            }
+
+            this.vkDevice.WaitIdle();
+            
+            this.CreateSwapchain();
+            this.CreateImageViews();
+            this.CreateRenderPass();
+            this.CreateGraphicsPipeline();
+            this.CreateFramebuffers();
+            this.CreateCommandPool();
+            this.CreateCommandBuffers();
+
+            this.swapchainCleanedUp = false;
+        }
+
         private void CreateSwapchain() {
             SwapchainSupportDetails support = VkHelper.QuerySwapchainSupport(this.vkPhysicalDevice, this.vkSurface);
             Vk.SurfaceFormatKhr format      = VkHelper.SelectSwapSurfaceFormat(support.formats);
             Vk.PresentModeKhr presentMode   = VkHelper.SelectSwapPresentMode(support.presentModes);
-            Vk.Extent2D extent              = VkHelper.SelectSwapExtent(support.capabilities, WIDTH, HEIGHT);
+            Vk.Extent2D extent              = VkHelper.SelectSwapExtent(support.capabilities, this.window);
 
             uint imageCount = support.capabilities.MinImageCount + 1;
 
@@ -660,9 +676,10 @@ namespace Game {
                 }
 
                 Glfw.PollEvents();
-
-                this.DrawFrame();
-                this.currentFrame = (this.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+                if(!(WIDTH == 0 || HEIGHT == 0)) {
+                    this.DrawFrame();
+                    this.currentFrame = (this.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+                }
             }
 
             this.vkDevice.WaitIdle();
@@ -670,10 +687,23 @@ namespace Game {
 
         private void DrawFrame() {
             this.vkDevice.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
-            this.vkDevice.ResetFence(this.vkInFlightFences[this.currentFrame]);
 
-            uint imageIndex = this.vkDevice.AcquireNextImageKHR(this.vkSwapchain, 
-                    UInt64.MaxValue, this.vkImageAvailableSemaphores[this.currentFrame]);
+            uint imageIndex = 0;
+            
+            try {
+                imageIndex = this.vkDevice.AcquireNextImageKHR(this.vkSwapchain, 
+                        UInt64.MaxValue, this.vkImageAvailableSemaphores[this.currentFrame]);
+            } catch(Vk.ResultException result) {
+                if(result.Result == Vk.Result.ErrorOutOfDateKhr) {
+                    this.RecreateSwapchain();
+                    return;
+                } else {
+                    Console.Error.WriteLine("An error occurred while acquiring a swapchain image.");
+                    Console.Error.WriteLine(result.Result);
+                }
+            }
+
+            this.vkDevice.ResetFence(this.vkInFlightFences[this.currentFrame]);
 
             var waitSemaphores   = new Vk.Semaphore[] { this.vkImageAvailableSemaphores[this.currentFrame] };
             var signalSemaphores = new Vk.Semaphore[] { this.vkRenderFinishedSemaphores[this.currentFrame] };
@@ -711,44 +741,82 @@ namespace Game {
                 imageIndex
             };
 
-            this.vkPresentQueue.PresentKHR(presentInfo);
+            try {
+                this.vkPresentQueue.PresentKHR(presentInfo);
+            } catch(Vk.ResultException result) {
+                if(result.Result == Vk.Result.ErrorOutOfDateKhr || 
+                        result.Result == Vk.Result.SuboptimalKhr ||
+                        Program.framebufferResized) {
+                    this.RecreateSwapchain();
+                    Program.framebufferResized = false;
+                } else {
+                    Console.Error.WriteLine("An error occurred while presenting an image.");
+                    Console.Error.WriteLine(result.Result);
+                }
+            }
+        }
+
+        private void CleanupSwapchain() {
+            // Destroy Framebuffers
+            foreach(Vk.Framebuffer framebuffer in this.vkSwapchainFramebuffers) {
+                this.vkDevice.DestroyFramebuffer(framebuffer);
+            }
+
+            // Free Command buffers
+            this.vkDevice.FreeCommandBuffers(this.vkCommandPool, this.vkCommandBuffers);
+
+            // Destroy Pipelines
+            foreach(Vk.Pipeline pipeline in this.vkPipelines) {
+                this.vkDevice.DestroyPipeline(pipeline);
+            }
+
+            // Destroy Pipeline Layout
+            this.vkDevice.DestroyPipelineLayout(this.vkPipelineLayout);
+
+            // Destroy Render Pass
+            this.vkDevice.DestroyRenderPass(this.vkRenderPass);
+
+            // Destroy Image Views
+            foreach(Vk.ImageView imageView in this.vkSwapchainImageViews) {
+                this.vkDevice.DestroyImageView(imageView);
+            }
+
+            // Destroy Swapchain
+            this.vkDevice.DestroySwapchainKHR(this.vkSwapchain);
+
+            this.swapchainCleanedUp = true;
         }
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
+                this.CleanupSwapchain();
+
+                // Destroy Sync Objects
                 for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
                     this.vkDevice.DestroySemaphore(this.vkImageAvailableSemaphores[i]);
                     this.vkDevice.DestroySemaphore(this.vkRenderFinishedSemaphores[i]);
                     this.vkDevice.DestroyFence(this.vkInFlightFences[i]);
                 }
 
+                // Destroy Command Pool
                 this.vkDevice.DestroyCommandPool(this.vkCommandPool);
 
-                foreach(Vk.Framebuffer framebuffer in this.vkSwapchainFramebuffers) {
-                    this.vkDevice.DestroyFramebuffer(framebuffer);
-                }
-
-                foreach(Vk.ImageView imageView in this.vkSwapchainImageViews) {
-                    this.vkDevice.DestroyImageView(imageView);
-                }
-
-                foreach(Vk.Pipeline pipeline in this.vkPipelines) {
-                    this.vkDevice.DestroyPipeline(pipeline);
-                }
-
-                this.vkDevice.DestroyPipelineLayout(this.vkPipelineLayout);
-                this.vkDevice.DestroyRenderPass(this.vkRenderPass);
+                // Destroy Logical Device
                 this.vkDevice.Destroy();
                 
+                // Destroy Debug Callback
                 if(this.ShouldUseValidationLayers()) {
                     this.vkInstance.DestroyDebugReportCallbackEXT(this.debugCallback);
                 }
 
-                this.vkDevice.DestroySwapchainKHR(this.vkSwapchain);
-                this.vkDevice.Destroy();
+                // Destroy Drawing Surface
+                this.vkInstance.DestroySurfaceKHR(this.vkSurface);
+
+                // Destroy Instance
                 this.vkInstance.Dispose();
             }
 
+            // Destroy Window
             Glfw.DestroyWindow(this.window);
             Glfw.Terminate();
         }

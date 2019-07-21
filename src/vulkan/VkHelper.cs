@@ -8,6 +8,7 @@ using Game.Math;
 using GLFW;
 using System.IO;
 using Vk = Vulkan;
+using Microsoft.Win32.SafeHandles;
 
 namespace Game.Vulkan {
     public static class VkHelper {
@@ -170,16 +171,10 @@ namespace Game.Vulkan {
             Type surfaceType = typeof(Vk.SurfaceKhr);
 
             Vk.SurfaceKhr surface = (Vk.SurfaceKhr) FormatterServices.GetUninitializedObject(surfaceType);
-            FieldInfo[] info = surfaceType.GetFields(BindingFlags.FlattenHierarchy |
+            FieldInfo handleField = surfaceType.GetField("m", BindingFlags.FlattenHierarchy |
                     BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
 
-            foreach(var i in info) {
-                if(i.Name.Equals("m")) {
-                    i.SetValue(surface, (ulong) handle.ToInt64());
-                    break;
-                }
-            }
-
+            handleField.SetValue(surface, (ulong) handle.ToInt64());
             return surface;
         }
 
@@ -228,15 +223,16 @@ namespace Game.Vulkan {
         }
         
         public static Vk.Extent2D SelectSwapExtent(Vk.SurfaceCapabilitiesKhr capabilities, 
-                int width, int height) {
+                Window window) {
             if(capabilities.CurrentExtent.Width != Int32.MaxValue) {
                 return capabilities.CurrentExtent;
             } else {
+                int width, height;
+                Glfw.GetFramebufferSize(window, out width, out height);
+
                 Vk.Extent2D actualExtent = new Vk.Extent2D();
-                actualExtent.Width = MathHelper.Clamp(capabilities.MinImageExtent.Width, 
-                        (uint) width, capabilities.MaxImageExtent.Width);
-                actualExtent.Height = MathHelper.Clamp(capabilities.MinImageExtent.Height, 
-                        (uint) height, capabilities.MaxImageExtent.Height);
+                actualExtent.Width  = (uint) width;
+                actualExtent.Height = (uint) height;
                 return actualExtent;
             }
         }
