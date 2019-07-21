@@ -120,11 +120,15 @@ namespace Game.Vulkan {
         public delegate bool PhysicalDeviceSuitabilityCheck(Vk.PhysicalDevice device);
 
         public static Vk.PhysicalDevice SelectPhysicalDevice(Vk.Instance instance, 
-                PhysicalDeviceSuitabilityCheck check) {
+                IEnumerable<PhysicalDeviceSuitabilityCheck> checks) {
             Vk.PhysicalDevice[] devices = instance.EnumeratePhysicalDevices();
 
             foreach(Vk.PhysicalDevice device in devices) {
-                if(check.Invoke(device)) {
+                foreach(var check in checks) {
+                    if(!check.Invoke(device)) {
+                        break;
+                    }
+
                     return device;
                 }
             }
@@ -275,5 +279,76 @@ namespace Game.Vulkan {
         public Vk.SurfaceCapabilitiesKhr capabilities;
         public Vk.SurfaceFormatKhr[]     formats;
         public Vk.PresentModeKhr[]       presentModes;
+    }
+
+    public struct DebugCallbackData {
+        public VkHelper.DebugCallback    callback;
+        public Vk.DebugReportCallbackExt wrapper;
+        public Vk.DebugReportFlagsExt    flags;
+    }
+
+    public struct SwapchainPipeline {
+        public Vk.SwapchainKhr    Swapchain;
+
+        public Vk.Format          Format;
+        public Vk.Extent2D        Extent;
+
+        public uint               ImageCapacity {
+            get => (uint) this.Images.Length;
+        }
+
+        public Vk.Image[]         Images;
+        public Vk.ImageView[]     ImageViews;
+        public Vk.Framebuffer[]   Framebuffers;
+
+        public Vk.RenderPass      RenderPass;
+        public Vk.PipelineLayout  PipelineLayout;
+        public Vk.Pipeline        Pipeline;
+
+        public Vk.CommandBuffer[] CommandBuffers;
+
+        private Vk.CommandPool    commandPool;
+        private Vk.Device         device;
+
+        public void Setup(Vk.Device device, Vk.CommandPool commandPool) {
+            this.commandPool = commandPool;
+            this.device = device;
+        }
+
+        public void Cleanup() {
+            // Destroy Framebuffers
+            foreach(Vk.Framebuffer framebuffer in this.Framebuffers) {
+                this.device.DestroyFramebuffer(framebuffer);
+            }
+
+            // Free Command buffers
+            this.device.FreeCommandBuffers(this.commandPool, this.CommandBuffers);
+
+            // Destroy Pipeline
+            this.device.DestroyPipeline(this.Pipeline);
+
+            // Destroy Pipeline Layout
+            this.device.DestroyPipelineLayout(this.PipelineLayout);
+
+            // Destroy Render Pass
+            this.device.DestroyRenderPass(this.RenderPass);
+
+            // Destroy Image Views
+            foreach(Vk.ImageView imageView in this.ImageViews) {
+                this.device.DestroyImageView(imageView);
+            }
+
+            // Destroy Swapchain
+            this.device.DestroySwapchainKHR(this.Swapchain);
+        }
+    }
+
+    public struct SwapchainParameters {
+        public Vk.SurfaceFormatKhr         SurfaceFormat;
+        public Vk.PresentModeKhr           PresentMode;
+        public Vk.Extent2D                 Extent;
+        public uint                        MinImageCount;
+        public uint                        MaxImageCount;
+        public Vk.SurfaceTransformFlagsKhr CurrentTransform;
     }
 }

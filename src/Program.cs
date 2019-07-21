@@ -8,65 +8,18 @@ using System.Collections.Generic;
 
 namespace Game {
     public class Program {
-
-        private string[] instanceExtensions = {
-
-        };
-
-        private string[] deviceExtensions = {
-            VkConstants.VK_KHR_swapchain
-        };
-
-        private string[] validationLayers = {
-            VkConstants.VK_LAYER_KHRONOS_vaidation
-        };
-
-        private string[] extensionsRequiredForValidationLayers = {
-            VkConstants.VK_EXT_debug_report
-        };
-
         public static int WIDTH = 640;
         public static int HEIGHT = 480;
-        private static bool framebufferResized = false;
+        public static bool RESIZED = false;
         
         private static int TICK_RATE = 60;
         private static double TICK_TIME = 1.0 / TICK_RATE;
 
-        private static int MAX_FRAMES_IN_FLIGHT = 2;
-
         private Window window;
-        private Vk.Instance vkInstance;
-        private Vk.PhysicalDevice vkPhysicalDevice;
-        private Vk.Device vkDevice;
-        private Vk.Queue vkGraphicsQueue;
-        private Vk.Queue vkPresentQueue;
-        private Vk.SurfaceKhr vkSurface;
-        private Vk.SwapchainKhr vkSwapchain;
-        private Vk.DebugReportCallbackExt debugCallback;
-        private Vk.Image[] vkSwapchainImages;
-        private Vk.ImageView[] vkSwapchainImageViews;
-        private QueueFamilyIndices vkQueueFamilies;
-        private Vk.Format vkSwapchainImageFormat;
-        private Vk.Extent2D vkSwapchainExtent;
-        private Vk.RenderPass vkRenderPass;
-        private Vk.PipelineLayout vkPipelineLayout;
-        private Vk.Pipeline[] vkPipelines;
-        private Vk.Framebuffer[] vkSwapchainFramebuffers;
-        private Vk.CommandPool vkCommandPool;
-        private Vk.CommandBuffer[] vkCommandBuffers;
-        private Vk.Semaphore[] vkImageAvailableSemaphores;
-        private Vk.Semaphore[] vkRenderFinishedSemaphores;
-        private Vk.Fence[] vkInFlightFences;
-
-        private int currentFrame = 0;
-
-        private bool swapchainCleanedUp = true;
+        private VkWrapper vulkan;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
-
-        private bool enableValidationLayers = false;
-        private bool? validationLayersSupported = null;
 
         static void Main(string[] args) {
             Program program = new Program();
@@ -74,8 +27,6 @@ namespace Game {
         }
 
         private void Run() {
-            this.enableValidationLayers = false;
-
             this.InitWindow();
             this.InitVulkan();
             this.MainLoop();
@@ -100,94 +51,24 @@ namespace Game {
         }
 
         private static void SetFrameBufferSize(IntPtr windowPointer, int width, int height) {
-            Program.framebufferResized = true;
+            Program.RESIZED = true;
             WIDTH = width;
             HEIGHT = height;
         }
 
         private void InitVulkan() {
             if(GLFW.Vulkan.IsSupported) {
-                this.CreateVulkanInstance();
+                this.vulkan = new VkWrapper();
 
-                if(this.ShouldUseValidationLayers()) {
-                    this.debugCallback = VkHelper.RegisterDebugReportCallback(this.vkInstance, 
-                        Vk.DebugReportFlagsExt.Debug, this.DebugReportCallback);
-                }
+                vulkan.EnableValidationLayers();
+                vulkan.RegisterDebugReportCallback(this.DebugReportCallback, 
+                        Vk.DebugReportFlagsExt.Debug);
 
-                this.CreateWindowSurface();
-
-                this.vkPhysicalDevice = VkHelper.SelectPhysicalDevice(this.vkInstance, this.CheckPhysicalDeviceSuitability);
-
-                this.CreateLogicalDevice();
-
-                this.vkGraphicsQueue     = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
-                this.vkPresentQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
-
-                this.RecreateSwapchain();
-
-                this.CreateSyncObjects();
+                vulkan.SetWindow(this.window);
+                vulkan.RegisterPhysicalDeviceSuitabilityCheck(this.CheckPhysicalDeviceSuitability);
+                vulkan.InitVulkan();
             } else {
                 Console.WriteLine("No Vulkan :(");
-            }
-        }
-
-        private void CreateVulkanInstance() {
-            InstanceBuilder builder = new InstanceBuilder();
-
-            builder.SetApplicationName("Thingy");
-            builder.SetApplicationVersion(Vk.Version.Make(1, 0, 0));
-            builder.SetEngineName("None");
-            builder.SetEngineVersion(Vk.Version.Make(1, 0, 0));
-            builder.SetApiVersion(Vk.Version.Make(1, 0, 0));
-
-            builder.EnableExtensions(VkHelper.GetGLFWRequiredInstanceExtensions());
-            builder.EnableExtensions(this.instanceExtensions);
-
-            if(this.ShouldUseValidationLayers()) {
-                builder.EnableExtensions(this.extensionsRequiredForValidationLayers);
-                builder.EnableValidationLayers(this.validationLayers);
-            }
-
-            try {
-                this.vkInstance = builder.Create();
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the Vulkan instance.");
-                Console.Error.WriteLine(result.Result);
-            }
-        }
-
-        private void CreateWindowSurface() {
-            try {
-                IntPtr allocatorPointer = IntPtr.Zero;
-                IntPtr surfacePointer   = new IntPtr();
-                IntPtr instancePointer  = VkHelper.InstancePointer(this.vkInstance);
-                IntPtr windowPointer    = this.window;
-
-                GLFW.Vulkan.CreateWindowSurface(instancePointer, windowPointer, allocatorPointer, out surfacePointer);
-
-                this.vkSurface = VkHelper.CreateSurfaceFromHandle(surfacePointer);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred creating the window surface.");
-                Console.Error.WriteLine(result.Result);
-            }
-        }
-
-        private bool ShouldUseValidationLayers() {
-            if(this.enableValidationLayers) {
-                if(this.validationLayersSupported == null) {
-                    bool supported = VkHelper.CheckValidationLayerSupport(this.validationLayers);
-                    this.validationLayersSupported = supported;
-
-                    if(!supported) {
-                        Console.Error.WriteLine("Validation Layers not supported.");
-                    }
-
-                    return supported;
-                } else {
-                    return this.validationLayersSupported.Value;
-                }
-            } else {
-                return false;
             }
         }
 
@@ -204,459 +85,20 @@ namespace Game {
         }
 
         private bool CheckPhysicalDeviceSuitability(Vk.PhysicalDevice device) {
-            bool queueSupport = VkHelper.CheckPhysicalDeviceQueueFamilySupport(device, 
-                    Vk.QueueFlags.Graphics, this.vkSurface, out this.vkQueueFamilies);
+            if(!this.vulkan.EnsureQueueFamilySupport(device, Vk.QueueFlags.Graphics)) {
+                return false;
+            }
 
-            if(!queueSupport) return false;
+            if(!VkHelper.CheckDeviceExtensionSupport(device, this.vulkan.DeviceExtensions)) {
+                return false;
+            }
 
-            bool extensionSupport = VkHelper.CheckDeviceExtensionSupport(device,
-                    this.deviceExtensions);
-
-            if(!extensionSupport) return false;
-
-            SwapchainSupportDetails swapchainSupport = 
-                    VkHelper.QuerySwapchainSupport(device, this.vkSurface);
+            var swapchainSupport = this.vulkan.QuerySwapchainSupport(device);
 
             bool swapchainAdequate = swapchainSupport.formats.Length != 0 &&
                     swapchainSupport.presentModes.Length != 0;
 
             return swapchainAdequate;
-        }
-
-        private void CreateLogicalDevice() {
-            LogicalDeviceBuilder builder = new LogicalDeviceBuilder();
-
-            HashSet<uint> queueTypes = new HashSet<uint>(new uint[] {
-                this.vkQueueFamilies.GraphicsFamily.Value,
-                this.vkQueueFamilies.PresentFamily.Value
-            });
-
-            foreach(uint queueType in queueTypes) {
-                Vk.DeviceQueueCreateInfo queueInfo = new Vk.DeviceQueueCreateInfo();
-                queueInfo.QueueFamilyIndex = queueType;
-                queueInfo.QueueCount = 1;
-                queueInfo.QueuePriorities = new float[] { 1.0F };
-
-                builder.EnableQueue(queueInfo);
-            }
-
-            builder.EnableExtensions(this.deviceExtensions);
-
-            // Vk.PhysicalDeviceFeatures deviceFeatures = new Vk.PhysicalDeviceFeatures();
-            // builder.SetFeatures(deviceFeatures);
-            
-            if(this.ShouldUseValidationLayers()) {
-                builder.EnableValidationLayer(VkConstants.VK_LAYER_KHRONOS_vaidation);
-            }
-
-            try {
-                this.vkDevice = builder.Create(this.vkPhysicalDevice);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the logical device.");
-                Console.Error.WriteLine(result.Result);
-            }
-        }
-
-        private void RecreateSwapchain() {
-            if(!this.swapchainCleanedUp) {
-                this.CleanupSwapchain();
-            }
-
-            this.vkDevice.WaitIdle();
-            
-            this.CreateSwapchain();
-            this.CreateImageViews();
-            this.CreateRenderPass();
-            this.CreateGraphicsPipeline();
-            this.CreateFramebuffers();
-            this.CreateCommandPool();
-            this.CreateCommandBuffers();
-
-            this.swapchainCleanedUp = false;
-        }
-
-        private void CreateSwapchain() {
-            SwapchainSupportDetails support = VkHelper.QuerySwapchainSupport(this.vkPhysicalDevice, this.vkSurface);
-            Vk.SurfaceFormatKhr format      = VkHelper.SelectSwapSurfaceFormat(support.formats);
-            Vk.PresentModeKhr presentMode   = VkHelper.SelectSwapPresentMode(support.presentModes);
-            Vk.Extent2D extent              = VkHelper.SelectSwapExtent(support.capabilities, this.window);
-
-            uint imageCount = support.capabilities.MinImageCount + 1;
-
-            if(support.capabilities.MaxImageCount > 0 && imageCount > support.capabilities.MaxImageCount) {
-                imageCount = support.capabilities.MaxImageCount;
-            }
-
-            Vk.SwapchainCreateInfoKhr createInfo = new Vk.SwapchainCreateInfoKhr();
-            createInfo.Surface          = this.vkSurface;
-            createInfo.MinImageCount    = imageCount;
-            createInfo.ImageFormat      = format.Format;
-            createInfo.ImageColorSpace  = format.ColorSpace;
-            createInfo.ImageExtent      = extent;
-            createInfo.ImageArrayLayers = 1;
-            createInfo.ImageUsage       = Vk.ImageUsageFlags.ColorAttachment;
-
-            this.vkSwapchainImageFormat = format.Format;
-
-            if(this.vkQueueFamilies.GraphicsFamily != this.vkQueueFamilies.PresentFamily) {
-                createInfo.ImageSharingMode = Vk.SharingMode.Concurrent;
-                createInfo.QueueFamilyIndexCount = 2;
-                createInfo.QueueFamilyIndices = new uint[] {
-                    this.vkQueueFamilies.GraphicsFamily.Value,
-                    this.vkQueueFamilies.PresentFamily.Value
-                };
-            } else {
-                createInfo.ImageSharingMode = Vk.SharingMode.Exclusive;
-                createInfo.QueueFamilyIndexCount = 0;
-                createInfo.QueueFamilyIndices = null;
-            }
-
-            createInfo.PreTransform = support.capabilities.CurrentTransform;
-            createInfo.CompositeAlpha = Vk.CompositeAlphaFlagsKhr.Opaque; // Blending with other windows? :o
-            createInfo.PresentMode = presentMode;
-            createInfo.Clipped = true;
-            createInfo.OldSwapchain = null;
-
-            try {
-                this.vkSwapchain = this.vkDevice.CreateSwapchainKHR(createInfo);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the swapchain.");
-                Console.Error.WriteLine(result.Result);
-            }
-
-            this.vkSwapchainImages = this.vkDevice.GetSwapchainImagesKHR(this.vkSwapchain);
-            this.vkSwapchainExtent = extent;
-        }
-
-        private void CreateImageViews() {
-            this.vkSwapchainImageViews = new Vk.ImageView[this.vkSwapchainImages.Length];
-
-            for(int i = 0; i < this.vkSwapchainImageViews.Length; i++) {
-                Vk.ImageViewCreateInfo createInfo = new Vk.ImageViewCreateInfo();
-                createInfo.Image = this.vkSwapchainImages[i];
-                createInfo.ViewType = Vk.ImageViewType.View2D;
-                createInfo.Format = this.vkSwapchainImageFormat;
-
-                Vk.ComponentMapping componentMapping = new Vk.ComponentMapping();
-                componentMapping.R = Vk.ComponentSwizzle.Identity;
-                componentMapping.G = Vk.ComponentSwizzle.Identity;
-                componentMapping.B = Vk.ComponentSwizzle.Identity;
-                componentMapping.A = Vk.ComponentSwizzle.Identity;
-
-                createInfo.Components = componentMapping;
-
-                Vk.ImageSubresourceRange subresourceRange = new Vk.ImageSubresourceRange();
-                subresourceRange.AspectMask     = Vk.ImageAspectFlags.Color;
-                subresourceRange.BaseMipLevel   = 0;
-                subresourceRange.LevelCount     = 1;
-                subresourceRange.BaseArrayLayer = 0;
-                subresourceRange.LayerCount     = 1;
-
-                createInfo.SubresourceRange = subresourceRange;
-
-                try {
-                    this.vkSwapchainImageViews[i] = this.vkDevice.CreateImageView(createInfo);
-                } catch(Vk.ResultException result) {
-                    Console.Error.WriteLine($"An error occurred while creating image view {i}.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
-        }
-
-        private void CreateRenderPass() {
-            var colourAttachment = new Vk.AttachmentDescription();
-            colourAttachment.Format         = this.vkSwapchainImageFormat;
-            colourAttachment.Samples        = Vk.SampleCountFlags.Count1;
-            colourAttachment.LoadOp         = Vk.AttachmentLoadOp.Clear;
-            colourAttachment.StoreOp        = Vk.AttachmentStoreOp.Store;
-            colourAttachment.StencilLoadOp  = Vk.AttachmentLoadOp.DontCare;
-            colourAttachment.StencilStoreOp = Vk.AttachmentStoreOp.DontCare;
-            colourAttachment.InitialLayout  = Vk.ImageLayout.Undefined;
-            colourAttachment.FinalLayout    = Vk.ImageLayout.PresentSrcKhr;
-
-            var colourAttachmentRef = new Vk.AttachmentReference();
-            colourAttachmentRef.Attachment = 0;
-            colourAttachmentRef.Layout     = Vk.ImageLayout.ColorAttachmentOptimal;
-
-            var subpass = new Vk.SubpassDescription();
-            subpass.PipelineBindPoint    = Vk.PipelineBindPoint.Graphics;
-            subpass.ColorAttachmentCount = 1;
-            subpass.ColorAttachments     = new Vk.AttachmentReference[] {
-                colourAttachmentRef
-            };
-
-            var subpassDep = new Vk.SubpassDependency();
-            subpassDep.SrcSubpass    = VkConstants.VK_SUBPASS_EXTERNAL;
-            subpassDep.DstSubpass    = 0;
-            subpassDep.SrcStageMask  = Vk.PipelineStageFlags.ColorAttachmentOutput;
-            subpassDep.DstStageMask  = Vk.PipelineStageFlags.ColorAttachmentOutput;
-            subpassDep.SrcAccessMask = 0;
-            subpassDep.DstAccessMask = Vk.AccessFlags.ColorAttachmentRead | Vk.AccessFlags.ColorAttachmentWrite;
-
-            var renderPassInfo = new Vk.RenderPassCreateInfo();
-            renderPassInfo.AttachmentCount = 1;
-            renderPassInfo.Attachments     = new Vk.AttachmentDescription[] {
-                colourAttachment
-            };
-            renderPassInfo.SubpassCount    = 1;
-            renderPassInfo.Subpasses       = new Vk.SubpassDescription[] {
-                subpass
-            };
-            renderPassInfo.DependencyCount = 1;
-            renderPassInfo.Dependencies    = new Vk.SubpassDependency[] {
-                subpassDep
-            };
-
-            try {
-                this.vkRenderPass = this.vkDevice.CreateRenderPass(renderPassInfo);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating a render pass.");
-                Console.Error.WriteLine(result.Result);
-            }
-        }
-
-        private void CreateGraphicsPipeline() {
-            byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
-            byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
-
-            Vk.ShaderModule fragModule = VkHelper.CreateShaderModule(this.vkDevice, fragBytecode);
-            Vk.ShaderModule vertModule = VkHelper.CreateShaderModule(this.vkDevice, vertBytecode);
-
-            var vertShaderStageInfo = new Vk.PipelineShaderStageCreateInfo();
-            vertShaderStageInfo.Stage  = Vk.ShaderStageFlags.Vertex;
-            vertShaderStageInfo.Module = vertModule;
-            vertShaderStageInfo.Name   = "main";
-
-            var fragShaderStageInfo = new Vk.PipelineShaderStageCreateInfo();
-            fragShaderStageInfo.Stage  = Vk.ShaderStageFlags.Fragment;
-            fragShaderStageInfo.Module = fragModule;
-            fragShaderStageInfo.Name   = "main";
-
-            var shaderStageInfos = new Vk.PipelineShaderStageCreateInfo[] {
-                vertShaderStageInfo,
-                fragShaderStageInfo
-            };
-
-            var vertexInputInfo = new Vk.PipelineVertexInputStateCreateInfo();
-            vertexInputInfo.VertexBindingDescriptionCount   = 0;
-            vertexInputInfo.VertexAttributeDescriptionCount = 0;
-
-            var inputAssemblyInfo = new Vk.PipelineInputAssemblyStateCreateInfo();
-            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleList;
-            inputAssemblyInfo.PrimitiveRestartEnable = false;
-
-            Vk.Viewport viewport = new Vk.Viewport();
-            viewport.X           = 0.0F;
-            viewport.Y           = 0.0F;
-            viewport.Width       = (float) this.vkSwapchainExtent.Width;
-            viewport.Height      = (float) this.vkSwapchainExtent.Height;
-            viewport.MinDepth    = 0.0F;
-            viewport.MaxDepth    = 1.0F;
-
-            Vk.Rect2D scissorRect = new Vk.Rect2D();
-            scissorRect.Offset.X  = 0;
-            scissorRect.Offset.Y  = 0;
-            scissorRect.Extent    = this.vkSwapchainExtent;
-
-            var viewportStateInfo = new Vk.PipelineViewportStateCreateInfo();
-            viewportStateInfo.ViewportCount = 1;
-            viewportStateInfo.Viewports     = new Vk.Viewport[] { viewport };
-            viewportStateInfo.ScissorCount  = 1;
-            viewportStateInfo.Scissors      = new Vk.Rect2D[] { scissorRect };
-
-            var rasteriserInfo = new Vk.PipelineRasterizationStateCreateInfo();
-            rasteriserInfo.DepthClampEnable        = false;
-            rasteriserInfo.RasterizerDiscardEnable = false;
-            rasteriserInfo.PolygonMode             = Vk.PolygonMode.Fill;
-            rasteriserInfo.LineWidth               = 1.0F;
-            rasteriserInfo.CullMode                = Vk.CullModeFlags.Back;
-            rasteriserInfo.FrontFace               = Vk.FrontFace.Clockwise;
-            rasteriserInfo.DepthBiasEnable         = false;
-
-            var multisamplingInfo = new Vk.PipelineMultisampleStateCreateInfo();
-            multisamplingInfo.SampleShadingEnable = false;
-            multisamplingInfo.RasterizationSamples = Vk.SampleCountFlags.Count1;
-
-            var colourBlendAttachmentInfo = new Vk.PipelineColorBlendAttachmentState();
-            colourBlendAttachmentInfo.ColorWriteMask = 
-                Vk.ColorComponentFlags.R | 
-                Vk.ColorComponentFlags.G | 
-                Vk.ColorComponentFlags.B | 
-                Vk.ColorComponentFlags.A;
-            colourBlendAttachmentInfo.BlendEnable         = true;
-            colourBlendAttachmentInfo.SrcColorBlendFactor = Vk.BlendFactor.SrcAlpha;
-            colourBlendAttachmentInfo.DstColorBlendFactor = Vk.BlendFactor.OneMinusSrcAlpha;
-            colourBlendAttachmentInfo.ColorBlendOp        = Vk.BlendOp.Add;
-            colourBlendAttachmentInfo.SrcAlphaBlendFactor = Vk.BlendFactor.One;
-            colourBlendAttachmentInfo.DstAlphaBlendFactor = Vk.BlendFactor.Zero;
-            colourBlendAttachmentInfo.AlphaBlendOp        = Vk.BlendOp.Add;
-
-            var colourBlendAttachmentInfos = new Vk.PipelineColorBlendAttachmentState[] {
-                colourBlendAttachmentInfo
-            };
-
-            var colourBlendStateInfo = new Vk.PipelineColorBlendStateCreateInfo();
-            colourBlendStateInfo.LogicOpEnable   = false;
-            colourBlendStateInfo.LogicOp         = Vk.LogicOp.Copy;
-            colourBlendStateInfo.AttachmentCount = 1;
-            colourBlendStateInfo.Attachments     = colourBlendAttachmentInfos;
-
-            var pipelineLayoutInfo = new Vk.PipelineLayoutCreateInfo();
-            
-            try {
-                this.vkPipelineLayout = this.vkDevice.CreatePipelineLayout(pipelineLayoutInfo);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the pipeline layout.");
-                Console.Error.WriteLine(result.Result);
-            }
-
-            var pipelineInfo = new Vk.GraphicsPipelineCreateInfo();
-            pipelineInfo.StageCount         = 2;
-            pipelineInfo.Stages             = shaderStageInfos;
-            pipelineInfo.VertexInputState   = vertexInputInfo;
-            pipelineInfo.InputAssemblyState = inputAssemblyInfo;
-            pipelineInfo.ViewportState      = viewportStateInfo;
-            pipelineInfo.RasterizationState = rasteriserInfo;
-            pipelineInfo.MultisampleState   = multisamplingInfo;
-            pipelineInfo.DepthStencilState  = null;
-            pipelineInfo.ColorBlendState    = colourBlendStateInfo;
-            pipelineInfo.DynamicState       = null;
-            pipelineInfo.Layout             = this.vkPipelineLayout;
-            pipelineInfo.RenderPass         = this.vkRenderPass;
-            pipelineInfo.Subpass            = 0;
-            pipelineInfo.BasePipelineHandle = null;
-            pipelineInfo.BasePipelineIndex  = -1;
-
-            var pipelineInfos = new Vk.GraphicsPipelineCreateInfo[] {
-                pipelineInfo
-            };
-
-            try {
-                this.vkPipelines = this.vkDevice.CreateGraphicsPipelines(null, pipelineInfos);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the graphics pipeline.");
-                Console.Error.WriteLine(result.Result);
-            }
-
-            this.vkDevice.DestroyShaderModule(fragModule);
-            this.vkDevice.DestroyShaderModule(vertModule);
-        }
-
-        private void CreateFramebuffers() {
-            this.vkSwapchainFramebuffers = new Vk.Framebuffer[this.vkSwapchainImageViews.Length];
-
-            for(uint i = 0; i < this.vkSwapchainImageViews.Length; i++) {
-                Vk.ImageView[] attachments = new Vk.ImageView[] {
-                    this.vkSwapchainImageViews[i]
-                };
-
-                var framebufferInfo = new Vk.FramebufferCreateInfo();
-                framebufferInfo.RenderPass      = this.vkRenderPass;
-                framebufferInfo.AttachmentCount = 1;
-                framebufferInfo.Attachments     = attachments;
-                framebufferInfo.Width           = this.vkSwapchainExtent.Width;
-                framebufferInfo.Height          = this.vkSwapchainExtent.Height;
-                framebufferInfo.Layers          = 1;
-
-                try {
-                    this.vkSwapchainFramebuffers[i] = this.vkDevice.CreateFramebuffer(framebufferInfo);
-                } catch (Vk.ResultException result) {
-                    Console.Error.WriteLine($"An error occurred while creating framebuffer {i}.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
-        }
-
-        private void CreateCommandPool() {
-            var poolInfo = new Vk.CommandPoolCreateInfo();
-            poolInfo.QueueFamilyIndex = this.vkQueueFamilies.GraphicsFamily.Value;
-
-            try {
-                this.vkCommandPool = this.vkDevice.CreateCommandPool(poolInfo);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the command pool.");
-                Console.Error.WriteLine(result.Result);
-            }
-        }
-
-        private void CreateCommandBuffers() {
-            var allocInfo = new Vk.CommandBufferAllocateInfo();
-            allocInfo.CommandPool        = this.vkCommandPool;
-            allocInfo.Level              = Vk.CommandBufferLevel.Primary;
-            allocInfo.CommandBufferCount = (uint) this.vkSwapchainFramebuffers.Length;
-
-            try {
-                this.vkCommandBuffers = this.vkDevice.AllocateCommandBuffers(allocInfo);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error occurred while creating the command buffers.");
-                Console.Error.WriteLine(result.Result);
-            }
-
-            for(int i = 0; i < this.vkCommandBuffers.Length; i++) {
-                Vk.CommandBuffer buffer = this.vkCommandBuffers[i];
-                var beginInfo = new Vk.CommandBufferBeginInfo();
-                beginInfo.Flags = Vk.CommandBufferUsageFlags.SimultaneousUse;
-
-                try {
-                    buffer.Begin(beginInfo);
-                } catch(Vk.ResultException result) {
-                    Console.Error.WriteLine($"An error occurred while beginning recording for command buffer {i}.");
-                    Console.Error.WriteLine(result.Result);
-                }
-
-                var renderPassInfo = new Vk.RenderPassBeginInfo();
-                renderPassInfo.RenderPass  = this.vkRenderPass;
-                renderPassInfo.Framebuffer = this.vkSwapchainFramebuffers[i];
-
-                var clearColour  = new Vk.ClearValue();
-                var renderArea   = new Vk.Rect2D();
-
-                clearColour.Color        = new Vk.ClearColorValue(new float[] { 0.0F, 0.0F, 0.0F, 1.0F });
-
-                renderArea.Extent.Width  = this.vkSwapchainExtent.Width;
-                renderArea.Extent.Height = this.vkSwapchainExtent.Height;
-                renderArea.Offset.X      = 0;
-                renderArea.Offset.Y      = 0;
-
-                renderPassInfo.RenderArea      = renderArea;
-                renderPassInfo.ClearValueCount = 1;
-                renderPassInfo.ClearValues     = new Vk.ClearValue[] {
-                    clearColour
-                };
-
-                this.vkCommandBuffers[i].CmdBeginRenderPass(renderPassInfo, Vk.SubpassContents.Inline);
-                this.vkCommandBuffers[i].CmdBindPipeline(Vk.PipelineBindPoint.Graphics, this.vkPipelines[0]);
-                this.vkCommandBuffers[i].CmdDraw(3, 1, 0, 0);
-                this.vkCommandBuffers[i].CmdEndRenderPass();
-
-                try {
-                    this.vkCommandBuffers[i].End();
-                } catch(Vk.ResultException result) {
-                    Console.Error.WriteLine($"An error occurred while recording for command buffer {i}.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
-        }
-
-        private void CreateSyncObjects() {
-            this.vkImageAvailableSemaphores = new Vk.Semaphore[MAX_FRAMES_IN_FLIGHT];
-            this.vkRenderFinishedSemaphores = new Vk.Semaphore[MAX_FRAMES_IN_FLIGHT];
-            this.vkInFlightFences           = new Vk.Fence[MAX_FRAMES_IN_FLIGHT];
-
-            var semaphoreInfo = new Vk.SemaphoreCreateInfo();
-            var fenceInfo     = new Vk.FenceCreateInfo();
-            fenceInfo.Flags   = Vk.FenceCreateFlags.Signaled;
-
-            for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-                try {
-                    this.vkImageAvailableSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
-                    this.vkRenderFinishedSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
-                    this.vkInFlightFences[i]           = this.vkDevice.CreateFence(fenceInfo);
-                } catch(Vk.ResultException result) {
-                    Console.Error.WriteLine("An error has occurred while creating sync objects.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
         }
 
         private void MainLoop() {
@@ -677,143 +119,18 @@ namespace Game {
 
                 Glfw.PollEvents();
                 if(!(WIDTH == 0 || HEIGHT == 0)) {
-                    this.DrawFrame();
-                    this.currentFrame = (this.currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+                    this.vulkan.DrawFrame();
+                    this.vulkan.currentFrame = 
+                            (this.vulkan.currentFrame + 1) % this.vulkan.maxFramesInFlight;
                 }
             }
 
-            this.vkDevice.WaitIdle();
-        }
-
-        private void DrawFrame() {
-            this.vkDevice.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
-
-            uint imageIndex = 0;
-            
-            try {
-                imageIndex = this.vkDevice.AcquireNextImageKHR(this.vkSwapchain, 
-                        UInt64.MaxValue, this.vkImageAvailableSemaphores[this.currentFrame]);
-            } catch(Vk.ResultException result) {
-                if(result.Result == Vk.Result.ErrorOutOfDateKhr) {
-                    this.RecreateSwapchain();
-                    return;
-                } else {
-                    Console.Error.WriteLine("An error occurred while acquiring a swapchain image.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
-
-            this.vkDevice.ResetFence(this.vkInFlightFences[this.currentFrame]);
-
-            var waitSemaphores   = new Vk.Semaphore[] { this.vkImageAvailableSemaphores[this.currentFrame] };
-            var signalSemaphores = new Vk.Semaphore[] { this.vkRenderFinishedSemaphores[this.currentFrame] };
-
-            var submitInfo = new Vk.SubmitInfo();
-            submitInfo.CommandBufferCount = 1;
-            submitInfo.WaitSemaphoreCount = 1;
-            submitInfo.SignalSemaphoreCount = 1;
-
-            submitInfo.CommandBuffers = new Vk.CommandBuffer[] {
-                this.vkCommandBuffers[imageIndex]
-            };
-            submitInfo.WaitSemaphores = waitSemaphores;
-            submitInfo.WaitDstStageMask = new Vk.PipelineStageFlags[] {
-                Vk.PipelineStageFlags.ColorAttachmentOutput
-            };
-            submitInfo.SignalSemaphores = signalSemaphores;
-
-            try {
-                this.vkGraphicsQueue.Submit(new Vk.SubmitInfo[] { submitInfo }, 
-                        this.vkInFlightFences[this.currentFrame]);
-            } catch(Vk.ResultException result) {
-                Console.Error.WriteLine("An error has occurred while submitting a command buffer.");
-                Console.Error.WriteLine(result.Result);
-            }
-
-            var presentInfo = new Vk.PresentInfoKhr();
-            presentInfo.WaitSemaphoreCount = 1;
-            presentInfo.WaitSemaphores     = signalSemaphores;
-            presentInfo.SwapchainCount     = 1;
-            presentInfo.Swapchains         = new Vk.SwapchainKhr[] { 
-                this.vkSwapchain
-            };
-            presentInfo.ImageIndices       = new uint[] {
-                imageIndex
-            };
-
-            try {
-                this.vkPresentQueue.PresentKHR(presentInfo);
-            } catch(Vk.ResultException result) {
-                if(result.Result == Vk.Result.ErrorOutOfDateKhr || 
-                        result.Result == Vk.Result.SuboptimalKhr ||
-                        Program.framebufferResized) {
-                    this.RecreateSwapchain();
-                    Program.framebufferResized = false;
-                } else {
-                    Console.Error.WriteLine("An error occurred while presenting an image.");
-                    Console.Error.WriteLine(result.Result);
-                }
-            }
-        }
-
-        private void CleanupSwapchain() {
-            // Destroy Framebuffers
-            foreach(Vk.Framebuffer framebuffer in this.vkSwapchainFramebuffers) {
-                this.vkDevice.DestroyFramebuffer(framebuffer);
-            }
-
-            // Free Command buffers
-            this.vkDevice.FreeCommandBuffers(this.vkCommandPool, this.vkCommandBuffers);
-
-            // Destroy Pipelines
-            foreach(Vk.Pipeline pipeline in this.vkPipelines) {
-                this.vkDevice.DestroyPipeline(pipeline);
-            }
-
-            // Destroy Pipeline Layout
-            this.vkDevice.DestroyPipelineLayout(this.vkPipelineLayout);
-
-            // Destroy Render Pass
-            this.vkDevice.DestroyRenderPass(this.vkRenderPass);
-
-            // Destroy Image Views
-            foreach(Vk.ImageView imageView in this.vkSwapchainImageViews) {
-                this.vkDevice.DestroyImageView(imageView);
-            }
-
-            // Destroy Swapchain
-            this.vkDevice.DestroySwapchainKHR(this.vkSwapchain);
-
-            this.swapchainCleanedUp = true;
+            this.vulkan.WaitForIdle();
         }
 
         private void Cleanup() {
             if(GLFW.Vulkan.IsSupported) {
-                this.CleanupSwapchain();
-
-                // Destroy Sync Objects
-                for(int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-                    this.vkDevice.DestroySemaphore(this.vkImageAvailableSemaphores[i]);
-                    this.vkDevice.DestroySemaphore(this.vkRenderFinishedSemaphores[i]);
-                    this.vkDevice.DestroyFence(this.vkInFlightFences[i]);
-                }
-
-                // Destroy Command Pool
-                this.vkDevice.DestroyCommandPool(this.vkCommandPool);
-
-                // Destroy Logical Device
-                this.vkDevice.Destroy();
-                
-                // Destroy Debug Callback
-                if(this.ShouldUseValidationLayers()) {
-                    this.vkInstance.DestroyDebugReportCallbackEXT(this.debugCallback);
-                }
-
-                // Destroy Drawing Surface
-                this.vkInstance.DestroySurfaceKHR(this.vkSurface);
-
-                // Destroy Instance
-                this.vkInstance.Dispose();
+                this.vulkan.Cleanup();
             }
 
             // Destroy Window
