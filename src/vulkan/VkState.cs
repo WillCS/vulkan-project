@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using Vk = Vulkan;
 
 namespace Game.Vulkan {
-    public class VkWrapper {
+    public class VkState {
 
         public int maxFramesInFlight = 2;
         public int currentFrame = 0;
@@ -27,34 +27,36 @@ namespace Game.Vulkan {
             VkConstants.VK_EXT_debug_report
         };
 
-        private Vk.Instance vkInstance;
-        private Vk.PhysicalDevice vkPhysicalDevice;
+        public Vk.Instance Instance;
+        public Vk.PhysicalDevice PhysicalDevice;
         private List<VkHelper.PhysicalDeviceSuitabilityCheck> physicalDeviceChecks;
 
-        private Vk.Device vkDevice;
+        public Vk.Device Device;
 
         private QueueFamilyIndices vkQueueFamilies;
-        private Vk.Queue vkGraphicsQueue;
-        private Vk.Queue vkPresentQueue;
+        public Vk.Queue TransferQueue;
+        public Vk.Queue GraphicsQueue;
+        public Vk.Queue PresentQueue;
 
-        private GLFW.Window window;
-        private Vk.SurfaceKhr vkSurface;
+        public GLFW.Window Window;
+        public Vk.SurfaceKhr Surface;
 
         private List<DebugCallbackData> debugCallbacks;
 
-        private SwapchainPipeline swapchainPipeline;
+        public SwapchainPipeline SwapchainPipeline;
 
         private List<Vertex> vertices;
         private Vk.Buffer vkVertexBuffer;
         private Vk.DeviceMemory vkVertexBufferMemory;
 
-        private Vk.CommandPool vkCommandPool;
+        public Vk.CommandPool GraphicsCommandPool;
+        public Vk.CommandPool TransferCommandPool;
 
         private Vk.Semaphore[] vkImageAvailableSemaphores;
         private Vk.Semaphore[] vkRenderFinishedSemaphores;
         private Vk.Fence[] vkInFlightFences;
 
-        public VkWrapper() {
+        public VkState() {
             this.physicalDeviceChecks = new List<VkHelper.PhysicalDeviceSuitabilityCheck>();
             this.vertices             = new List<Vertex>();
         }
@@ -85,7 +87,7 @@ namespace Game.Vulkan {
         }
 
         public void SetWindow(GLFW.Window window) {
-            this.window = window;
+            this.Window = window;
         }
         
         public void RegisterPhysicalDeviceSuitabilityCheck(
@@ -102,36 +104,38 @@ namespace Game.Vulkan {
         }
 
         public void WaitForIdle() {
-            this.vkDevice.WaitIdle();
+            this.Device.WaitIdle();
         }
 
         public bool EnsureQueueFamilySupport(Vk.PhysicalDevice device, Vk.QueueFlags family) =>
             VkHelper.CheckPhysicalDeviceQueueFamilySupport(device,
-                    family, this.vkSurface, out this.vkQueueFamilies);
+                    family, this.Surface, out this.vkQueueFamilies);
 
         public SwapchainSupportDetails QuerySwapchainSupport(Vk.PhysicalDevice device) =>
-            VkHelper.QuerySwapchainSupport(device, this.vkSurface);
+            VkHelper.QuerySwapchainSupport(device, this.Surface);
 
         public void InitVulkan() {
             this.createVulkanInstance();
 
             if(this.validationLayersEnabled) {
                 this.debugCallbacks.ForEach((DebugCallbackData callbackData) => {
-                    callbackData.wrapper = VkHelper.RegisterDebugReportCallback(this.vkInstance, 
+                    callbackData.wrapper = VkHelper.RegisterDebugReportCallback(this.Instance, 
                         callbackData.flags, callbackData.callback);
                 });
             }
 
             this.createWindowSurface();
 
-            this.vkPhysicalDevice = VkHelper.SelectPhysicalDevice(this.vkInstance, this.physicalDeviceChecks);
+            this.PhysicalDevice = VkHelper.SelectPhysicalDevice(this.Instance, this.physicalDeviceChecks);
 
             this.createLogicalDevice();
 
-            this.vkGraphicsQueue = this.vkDevice.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
-            this.vkPresentQueue  = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
+            this.GraphicsQueue = this.Device.GetQueue(this.vkQueueFamilies.GraphicsFamily.Value, 0);
+            this.TransferQueue = this.GraphicsQueue;
+            this.PresentQueue  = this.Device.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
             
-            this.createCommandPool();
+            this.createGraphicsCommandPool();
+            this.createTransferCommandPool();
             this.createVertexBuffer();
 
             this.createSwapchainPipeline();
@@ -157,7 +161,7 @@ namespace Game.Vulkan {
             }
 
             try {
-                this.vkInstance = builder.Create();
+                this.Instance = builder.Create();
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the Vulkan instance.");
             }
@@ -167,12 +171,12 @@ namespace Game.Vulkan {
             try {
                 IntPtr allocatorPointer = IntPtr.Zero;
                 IntPtr surfacePointer   = new IntPtr();
-                IntPtr instancePointer  = VkHelper.InstancePointer(this.vkInstance);
-                IntPtr windowPointer    = this.window;
+                IntPtr instancePointer  = VkHelper.InstancePointer(this.Instance);
+                IntPtr windowPointer    = this.Window;
 
                 GLFW.Vulkan.CreateWindowSurface(instancePointer, windowPointer, allocatorPointer, out surfacePointer);
 
-                this.vkSurface = VkHelper.CreateSurfaceFromHandle(surfacePointer);
+                this.Surface = VkHelper.CreateSurfaceFromHandle(surfacePointer);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred creating the window surface.");
             }
@@ -202,36 +206,48 @@ namespace Game.Vulkan {
             }
 
             try {
-                this.vkDevice = builder.Create(this.vkPhysicalDevice);
+                this.Device = builder.Create(this.PhysicalDevice);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the logical device.");
             }
         }
 
-        private void createCommandPool() {
+        private void createGraphicsCommandPool() {
             var poolInfo = new Vk.CommandPoolCreateInfo();
             poolInfo.QueueFamilyIndex = this.vkQueueFamilies.GraphicsFamily.Value;
 
             try {
-                this.vkCommandPool = this.vkDevice.CreateCommandPool(poolInfo);
+                this.GraphicsCommandPool = this.Device.CreateCommandPool(poolInfo);
             } catch(Vk.ResultException result) {
-                this.error(result, "An error occurred while creating the command pool.");
+                this.error(result, "An error occurred while creating the graphics command pool.");
+            }
+        }
+
+        private void createTransferCommandPool() {
+            var poolInfo = new Vk.CommandPoolCreateInfo();
+            poolInfo.QueueFamilyIndex = this.vkQueueFamilies.GraphicsFamily.Value;
+            poolInfo.Flags = Vk.CommandPoolCreateFlags.Transient;
+
+            try {
+                this.TransferCommandPool = this.Device.CreateCommandPool(poolInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the transfer command pool.");
             }
         }
 
         private void createSwapchainPipeline() {
             if(!this.swapchainCleanedUp) {
-                this.swapchainPipeline.Cleanup();
+                this.SwapchainPipeline.Cleanup();
             }
 
-            this.vkDevice.WaitIdle();
+            this.Device.WaitIdle();
 
-            var support = VkHelper.QuerySwapchainSupport(this.vkPhysicalDevice, this.vkSurface);
+            var support = VkHelper.QuerySwapchainSupport(this.PhysicalDevice, this.Surface);
             var swapchainParameters = new SwapchainParameters();
 
             var format      = VkHelper.SelectSwapSurfaceFormat(support.formats);
             var presentMode = VkHelper.SelectSwapPresentMode(support.presentModes);
-            var extent      = VkHelper.SelectSwapExtent(support.capabilities, this.window);
+            var extent      = VkHelper.SelectSwapExtent(support.capabilities, this.Window);
             
             swapchainParameters.SurfaceFormat    = format;
             swapchainParameters.PresentMode      = presentMode;
@@ -241,20 +257,20 @@ namespace Game.Vulkan {
             swapchainParameters.CurrentTransform = support.capabilities.CurrentTransform;
 
             var swapchainPipeline = new SwapchainPipeline();
-            swapchainPipeline.Setup(this.vkDevice, this.vkCommandPool);
+            swapchainPipeline.Setup(this.Device, this.GraphicsCommandPool);
             swapchainPipeline.Format = format.Format;
             swapchainPipeline.Extent = extent;
 
             var swapchain = this.createSwapchain(swapchainParameters);
             swapchainPipeline.Swapchain      = swapchain;
-            swapchainPipeline.Images         = this.vkDevice.GetSwapchainImagesKHR(swapchain);
+            swapchainPipeline.Images         = this.Device.GetSwapchainImagesKHR(swapchain);
             swapchainPipeline.ImageViews     = this.createImageViews(swapchainPipeline);
             swapchainPipeline.RenderPass     = this.createRenderPass(swapchainPipeline);
             swapchainPipeline.Pipeline       = this.createGraphicsPipeline(swapchainPipeline);
             swapchainPipeline.Framebuffers   = this.createFramebuffers(swapchainPipeline);
             swapchainPipeline.CommandBuffers = this.createCommandBuffers(swapchainPipeline);
 
-            this.swapchainPipeline = swapchainPipeline;
+            this.SwapchainPipeline = swapchainPipeline;
             this.swapchainCleanedUp = false;
         }
 
@@ -266,7 +282,7 @@ namespace Game.Vulkan {
             }
 
             Vk.SwapchainCreateInfoKhr createInfo = new Vk.SwapchainCreateInfoKhr();
-            createInfo.Surface          = this.vkSurface;
+            createInfo.Surface          = this.Surface;
             createInfo.MinImageCount    = imageCount;
             createInfo.ImageFormat      = parameters.SurfaceFormat.Format;
             createInfo.ImageColorSpace  = parameters.SurfaceFormat.ColorSpace;
@@ -294,7 +310,7 @@ namespace Game.Vulkan {
             createInfo.OldSwapchain = null;
 
             try {
-                return this.vkDevice.CreateSwapchainKHR(createInfo);
+                return this.Device.CreateSwapchainKHR(createInfo);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the swapchain.");
                 return null;
@@ -328,7 +344,7 @@ namespace Game.Vulkan {
                 createInfo.SubresourceRange = subresourceRange;
 
                 try {
-                    imageViews[i] = this.vkDevice.CreateImageView(createInfo);
+                    imageViews[i] = this.Device.CreateImageView(createInfo);
                 } catch(Vk.ResultException result) {
                     this.error(result, $"An error occurred while creating image view {i}.");
                     return null;
@@ -382,7 +398,7 @@ namespace Game.Vulkan {
             };
 
             try {
-                return this.vkDevice.CreateRenderPass(renderPassInfo);
+                return this.Device.CreateRenderPass(renderPassInfo);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating a render pass.");
                 return null;
@@ -393,8 +409,8 @@ namespace Game.Vulkan {
             byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
             byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
 
-            Vk.ShaderModule fragModule = VkHelper.CreateShaderModule(this.vkDevice, fragBytecode);
-            Vk.ShaderModule vertModule = VkHelper.CreateShaderModule(this.vkDevice, vertBytecode);
+            Vk.ShaderModule fragModule = VkHelper.CreateShaderModule(this.Device, fragBytecode);
+            Vk.ShaderModule vertModule = VkHelper.CreateShaderModule(this.Device, vertBytecode);
 
             var vertShaderStageInfo = new Vk.PipelineShaderStageCreateInfo();
             vertShaderStageInfo.Stage  = Vk.ShaderStageFlags.Vertex;
@@ -423,7 +439,7 @@ namespace Game.Vulkan {
             vertexInputInfo.VertexAttributeDescriptions     = attributes;
 
             var inputAssemblyInfo = new Vk.PipelineInputAssemblyStateCreateInfo();
-            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleList;
+            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleStrip;
             inputAssemblyInfo.PrimitiveRestartEnable = false;
 
             Vk.Viewport viewport = new Vk.Viewport();
@@ -485,7 +501,7 @@ namespace Game.Vulkan {
             var pipelineLayoutInfo = new Vk.PipelineLayoutCreateInfo();
             
             try {
-                swapchainPipeline.PipelineLayout = this.vkDevice.CreatePipelineLayout(pipelineLayoutInfo);
+                swapchainPipeline.PipelineLayout = this.Device.CreatePipelineLayout(pipelineLayoutInfo);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the pipeline layout.");
                 return null;
@@ -515,13 +531,13 @@ namespace Game.Vulkan {
             Vk.Pipeline[] pipeline = null;
 
             try {
-                pipeline = this.vkDevice.CreateGraphicsPipelines(null, pipelineInfos);
+                pipeline = this.Device.CreateGraphicsPipelines(null, pipelineInfos);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the graphics pipeline.");
             }
 
-            this.vkDevice.DestroyShaderModule(fragModule);
-            this.vkDevice.DestroyShaderModule(vertModule);
+            this.Device.DestroyShaderModule(fragModule);
+            this.Device.DestroyShaderModule(vertModule);
 
             return pipeline[0];
         }
@@ -543,7 +559,7 @@ namespace Game.Vulkan {
                 framebufferInfo.Layers          = 1;
 
                 try {
-                    framebuffers[i] = this.vkDevice.CreateFramebuffer(framebufferInfo);
+                    framebuffers[i] = this.Device.CreateFramebuffer(framebufferInfo);
                 } catch (Vk.ResultException result) {
                     this.error(result, $"An error occurred while creating framebuffer {i}.");
                     return null;
@@ -554,58 +570,52 @@ namespace Game.Vulkan {
         }
 
         private void createVertexBuffer() {
-            var bufferInfo = new Vk.BufferCreateInfo();
-            bufferInfo.Size = (ulong) (this.vertices.Count * Marshal.SizeOf<Vertex>());
-            bufferInfo.Usage = Vk.BufferUsageFlags.VertexBuffer;
-            bufferInfo.SharingMode = Vk.SharingMode.Exclusive;
+            var size  = (ulong) (this.vertices.Count * Marshal.SizeOf<Vertex>());
+            var transferUsage = Vk.BufferUsageFlags.TransferSrc;
+            var vertexUsage = Vk.BufferUsageFlags.VertexBuffer
+                    | Vk.BufferUsageFlags.TransferDst;
+            var memoryProps = Vk.MemoryPropertyFlags.HostVisible
+                    | Vk.MemoryPropertyFlags.HostCoherent;
+            var sharingMode = Vk.SharingMode.Exclusive;
+            Vk.DeviceMemory stagingBufferMemory;
+            Vk.Buffer stagingBuffer;
+
+            try {
+                stagingBuffer = VkHelper.CreateBuffer(this, size, transferUsage,
+                        memoryProps, sharingMode, out stagingBufferMemory);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the staging buffer.");
+                return;
+            }
+
+            IntPtr memory = this.Device.MapMemory(stagingBufferMemory, 0, size);
+            var vertexArray = this.vertices.ToArray();
+            MemoryManagement.ArrayToPtr<Vertex>(vertexArray, memory, false);
+            this.Device.UnmapMemory(stagingBufferMemory);
             
             try {
-                this.vkVertexBuffer = this.vkDevice.CreateBuffer(bufferInfo);
+                this.vkVertexBuffer = VkHelper.CreateBuffer(this, size, vertexUsage, memoryProps, 
+                        sharingMode, out this.vkVertexBufferMemory);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the vertex buffer.");
             }
 
-            var memReqs = this.vkDevice.GetBufferMemoryRequirements(this.vkVertexBuffer);
-            var memTypeIndex = VkHelper.FindMemoryType(memReqs.MemoryTypeBits, this.vkPhysicalDevice,
-                    Vk.MemoryPropertyFlags.HostVisible | Vk.MemoryPropertyFlags.HostCoherent);
+            VkHelper.CopyBuffer(stagingBuffer, this.vkVertexBuffer, size, this);
 
-            var memAllocInfo = new Vk.MemoryAllocateInfo();
-            memAllocInfo.AllocationSize  = memReqs.Size;
-            memAllocInfo.MemoryTypeIndex = memTypeIndex;
-
-            try {
-                this.vkVertexBufferMemory = this.vkDevice.AllocateMemory(memAllocInfo);
-            } catch(Vk.ResultException result) {
-                this.error(result, "An error occurred while allocating vertex buffer memory.");
-            }
-
-            this.vkDevice.BindBufferMemory(this.vkVertexBuffer, this.vkVertexBufferMemory, 0);
-
-            IntPtr memory = this.vkDevice.MapMemory(this.vkVertexBufferMemory, 0, bufferInfo.Size);
-            var vertexArray = this.vertices.ToArray();
-
-            MemoryManagement.MarshalArray<Vertex>(vertexArray, memory, false);
-
-            Vertex read = Marshal.PtrToStructure<Vertex>(memory);
-            Console.WriteLine(read.Position.X);
-            Console.WriteLine(read.Position.Y);
-            Console.WriteLine(read.Colour.X);
-            Console.WriteLine(read.Colour.Y);
-            Console.WriteLine(read.Colour.Z);
-
-            this.vkDevice.UnmapMemory(this.vkVertexBufferMemory);
+            this.Device.DestroyBuffer(stagingBuffer);
+            this.Device.FreeMemory(stagingBufferMemory);
         }
 
         private Vk.CommandBuffer[] createCommandBuffers(SwapchainPipeline swapchainPipeline) {
             var allocInfo = new Vk.CommandBufferAllocateInfo();
-            allocInfo.CommandPool        = this.vkCommandPool;
+            allocInfo.CommandPool        = this.GraphicsCommandPool;
             allocInfo.Level              = Vk.CommandBufferLevel.Primary;
             allocInfo.CommandBufferCount = swapchainPipeline.ImageCapacity;
 
             Vk.CommandBuffer[] buffers = null;
 
             try {
-                buffers = this.vkDevice.AllocateCommandBuffers(allocInfo);
+                buffers = this.Device.AllocateCommandBuffers(allocInfo);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the command buffers.");
                 return null;
@@ -670,9 +680,9 @@ namespace Game.Vulkan {
 
             for(int i = 0; i < this.maxFramesInFlight; i++) {
                 try {
-                    this.vkImageAvailableSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
-                    this.vkRenderFinishedSemaphores[i] = this.vkDevice.CreateSemaphore(semaphoreInfo);
-                    this.vkInFlightFences[i]           = this.vkDevice.CreateFence(fenceInfo);
+                    this.vkImageAvailableSemaphores[i] = this.Device.CreateSemaphore(semaphoreInfo);
+                    this.vkRenderFinishedSemaphores[i] = this.Device.CreateSemaphore(semaphoreInfo);
+                    this.vkInFlightFences[i]           = this.Device.CreateFence(fenceInfo);
                 } catch(Vk.ResultException result) {
                     this.error(result, "An error has occurred while creating sync objects.");
                 }
@@ -680,12 +690,12 @@ namespace Game.Vulkan {
         }
         
         public void DrawFrame() {
-            this.vkDevice.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
+            this.Device.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
 
             uint imageIndex = 0;
             
             try {
-                imageIndex = this.vkDevice.AcquireNextImageKHR(this.swapchainPipeline.Swapchain, 
+                imageIndex = this.Device.AcquireNextImageKHR(this.SwapchainPipeline.Swapchain, 
                         UInt64.MaxValue, this.vkImageAvailableSemaphores[this.currentFrame]);
             } catch(Vk.ResultException result) {
                 if(result.Result == Vk.Result.ErrorOutOfDateKhr) {
@@ -696,7 +706,7 @@ namespace Game.Vulkan {
                 }
             }
 
-            this.vkDevice.ResetFence(this.vkInFlightFences[this.currentFrame]);
+            this.Device.ResetFence(this.vkInFlightFences[this.currentFrame]);
 
             var waitSemaphores   = new Vk.Semaphore[] { this.vkImageAvailableSemaphores[this.currentFrame] };
             var signalSemaphores = new Vk.Semaphore[] { this.vkRenderFinishedSemaphores[this.currentFrame] };
@@ -707,7 +717,7 @@ namespace Game.Vulkan {
             submitInfo.SignalSemaphoreCount = 1;
 
             submitInfo.CommandBuffers = new Vk.CommandBuffer[] {
-                this.swapchainPipeline.CommandBuffers[imageIndex]
+                this.SwapchainPipeline.CommandBuffers[imageIndex]
             };
 
             submitInfo.WaitSemaphores = waitSemaphores;
@@ -717,7 +727,7 @@ namespace Game.Vulkan {
             submitInfo.SignalSemaphores = signalSemaphores;
 
             try {
-                this.vkGraphicsQueue.Submit(new Vk.SubmitInfo[] { submitInfo }, 
+                this.GraphicsQueue.Submit(new Vk.SubmitInfo[] { submitInfo }, 
                         this.vkInFlightFences[this.currentFrame]);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error has occurred while submitting a command buffer.");
@@ -728,7 +738,7 @@ namespace Game.Vulkan {
             presentInfo.WaitSemaphores     = signalSemaphores;
             presentInfo.SwapchainCount     = 1;
             presentInfo.Swapchains         = new Vk.SwapchainKhr[] { 
-                this.swapchainPipeline.Swapchain
+                this.SwapchainPipeline.Swapchain
             };
 
             presentInfo.ImageIndices       = new uint[] {
@@ -736,7 +746,7 @@ namespace Game.Vulkan {
             };
 
             try {
-                this.vkPresentQueue.PresentKHR(presentInfo);
+                this.PresentQueue.PresentKHR(presentInfo);
             } catch(Vk.ResultException result) {
                 if(result.Result == Vk.Result.ErrorOutOfDateKhr || 
                         result.Result == Vk.Result.SuboptimalKhr ||
@@ -750,37 +760,37 @@ namespace Game.Vulkan {
         }
 
         public void Cleanup() {
-            this.swapchainPipeline.Cleanup();
+            this.SwapchainPipeline.Cleanup();
 
             // Destroy Sync Objects
             for(int i = 0; i < this.maxFramesInFlight; i++) {
-                this.vkDevice.DestroySemaphore(this.vkImageAvailableSemaphores[i]);
-                this.vkDevice.DestroySemaphore(this.vkRenderFinishedSemaphores[i]);
-                this.vkDevice.DestroyFence(this.vkInFlightFences[i]);
+                this.Device.DestroySemaphore(this.vkImageAvailableSemaphores[i]);
+                this.Device.DestroySemaphore(this.vkRenderFinishedSemaphores[i]);
+                this.Device.DestroyFence(this.vkInFlightFences[i]);
             }
 
             // Destroy Vertex Buffer and free its allocated memory
-            this.vkDevice.DestroyBuffer(this.vkVertexBuffer);
-            this.vkDevice.FreeMemory(this.vkVertexBufferMemory);
+            this.Device.DestroyBuffer(this.vkVertexBuffer);
+            this.Device.FreeMemory(this.vkVertexBufferMemory);
 
             // Destroy Command Pool
-            this.vkDevice.DestroyCommandPool(this.vkCommandPool);
+            this.Device.DestroyCommandPool(this.GraphicsCommandPool);
 
             // Destroy Logical Device
-            this.vkDevice.Destroy();
+            this.Device.Destroy();
             
             // Destroy Debug Callback
             if(this.validationLayersEnabled) {
                 this.debugCallbacks.ForEach((DebugCallbackData callback) => {
-                    this.vkInstance.DestroyDebugReportCallbackEXT(callback.wrapper);
+                    this.Instance.DestroyDebugReportCallbackEXT(callback.wrapper);
                 });
             }
 
             // Destroy Drawing Surface
-            this.vkInstance.DestroySurfaceKHR(this.vkSurface);
+            this.Instance.DestroySurfaceKHR(this.Surface);
 
             // Destroy Instance
-            this.vkInstance.Dispose();
+            this.Instance.Dispose();
         }
 
         private void error(Vk.ResultException result, string message) {

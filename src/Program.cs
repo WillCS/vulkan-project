@@ -17,7 +17,7 @@ namespace Game {
         private static double TICK_TIME = 1.0 / TICK_RATE;
 
         private Window window;
-        private VkWrapper vulkan;
+        private VkState vulkan;
 
         private double timeLastLoop = 0;
         private double accumulator = 0;
@@ -59,7 +59,7 @@ namespace Game {
 
         private void InitVulkan() {
             if(GLFW.Vulkan.IsSupported) {
-                this.vulkan = new VkWrapper();
+                this.vulkan = new VkState();
 
                 vulkan.EnableValidationLayers();
                 vulkan.RegisterDebugReportCallback(this.DebugReportCallback, 
@@ -74,19 +74,24 @@ namespace Game {
                 
                 Vertex v1 = new Vertex();
                 v1.Colour   = new Vector3(1.0, 0.0, 0.0);
-                v1.Position = new Vector2( 0.0, -0.5);
+                v1.Position = new Vector2(-0.5, -0.5);
 
                 Vertex v2 = new Vertex();
                 v2.Colour   = new Vector3(0.0, 1.0, 0.0);
-                v2.Position = new Vector2( 0.5,  0.5);
+                v2.Position = new Vector2( 0.5, -0.5);
 
                 Vertex v3 = new Vertex();
                 v3.Colour   = new Vector3(0.0, 0.0, 1.0);
                 v3.Position = new Vector2(-0.5,  0.5);
 
+                Vertex v4 = new Vertex();
+                v4.Colour   = new Vector3(0.0, 1.0, 1.0);
+                v4.Position = new Vector2( 0.5,  0.5);
+
                 vulkan.AddVertex(v1);
                 vulkan.AddVertex(v2);
                 vulkan.AddVertex(v3);
+                vulkan.AddVertex(v4);
 
                 vulkan.InitVulkan();
             } else {

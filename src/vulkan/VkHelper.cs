@@ -161,6 +161,60 @@ namespace Game.Vulkan {
             return false;
         }
 
+        public static Vk.Buffer CreateBuffer(VkState vulkan, Vk.DeviceSize size,
+                Vk.BufferUsageFlags usage, Vk.MemoryPropertyFlags memoryProps, 
+                Vk.SharingMode sharingMode, out Vk.DeviceMemory bufferMemory) {
+            var bufferInfo         = new Vk.BufferCreateInfo();
+            bufferInfo.Size        = size;
+            bufferInfo.Usage       = usage;
+            bufferInfo.SharingMode = sharingMode;
+
+            var buffer = vulkan.Device.CreateBuffer(bufferInfo);
+
+            var memoryReqs = vulkan.Device.GetBufferMemoryRequirements(buffer);
+            var allocInfo  = new Vk.MemoryAllocateInfo();
+            allocInfo.AllocationSize  = memoryReqs.Size;
+            allocInfo.MemoryTypeIndex = FindMemoryType(memoryReqs.MemoryTypeBits, 
+                    vulkan.PhysicalDevice, memoryProps);
+
+            bufferMemory = vulkan.Device.AllocateMemory(allocInfo);
+            vulkan.Device.BindBufferMemory(buffer, bufferMemory, 0);
+
+            return buffer;
+        }
+
+        public static void CopyBuffer(Vk.Buffer src, Vk.Buffer dest, Vk.DeviceSize size,
+                VkState state) {
+            var allocInfo = new Vk.CommandBufferAllocateInfo();
+            allocInfo.Level              = Vk.CommandBufferLevel.Primary;
+            allocInfo.CommandPool        = state.TransferCommandPool;
+            allocInfo.CommandBufferCount = 1;
+
+            var commandBuffer = state.Device.AllocateCommandBuffers(allocInfo)[0];
+
+            var beginInfo   = new Vk.CommandBufferBeginInfo();
+            beginInfo.Flags = Vk.CommandBufferUsageFlags.OneTimeSubmit;
+
+            commandBuffer.Begin(beginInfo);
+
+            var copyRegion       = new Vk.BufferCopy();
+            copyRegion.SrcOffset = 0;
+            copyRegion.DstOffset = 0;
+            copyRegion.Size      = size;
+
+            commandBuffer.CmdCopyBuffer(src, dest, copyRegion);
+            commandBuffer.End();
+
+            var submitInfo = new Vk.SubmitInfo();
+            submitInfo.CommandBufferCount = 1;
+            submitInfo.CommandBuffers = new Vk.CommandBuffer[] { commandBuffer };
+
+            state.TransferQueue.Submit(submitInfo);
+            state.TransferQueue.WaitIdle();
+
+            state.Device.FreeCommandBuffer(state.TransferCommandPool, commandBuffer);
+        }
+
         public static IntPtr InstancePointer(Vk.Instance instance) =>
             ((Vk.IMarshalling) instance).Handle;
 
@@ -286,7 +340,8 @@ namespace Game.Vulkan {
         public uint? PresentFamily;
 
         public bool AllFamiliesExist() {
-            return this.GraphicsFamily.HasValue && this.PresentFamily.HasValue;
+            return this.GraphicsFamily.HasValue
+                && this.PresentFamily.HasValue;
         }
     }
 
