@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using Vk = Vulkan;
 
 namespace Game.Vulkan {
@@ -43,6 +44,10 @@ namespace Game.Vulkan {
 
         private SwapchainPipeline swapchainPipeline;
 
+        private List<Vertex> vertices;
+        private Vk.Buffer vkVertexBuffer;
+        private Vk.DeviceMemory vkVertexBufferMemory;
+
         private Vk.CommandPool vkCommandPool;
 
         private Vk.Semaphore[] vkImageAvailableSemaphores;
@@ -51,6 +56,7 @@ namespace Game.Vulkan {
 
         public VkWrapper() {
             this.physicalDeviceChecks = new List<VkHelper.PhysicalDeviceSuitabilityCheck>();
+            this.vertices             = new List<Vertex>();
         }
 
         public void EnableValidationLayers() {
@@ -87,6 +93,14 @@ namespace Game.Vulkan {
             this.physicalDeviceChecks.Add(check);
         }
 
+        public void AddVertex(Vertex vertex) {
+            this.vertices.Add(vertex);
+        }
+
+        public void AddVertices(IEnumerable<Vertex> vertices) {
+            this.vertices.AddRange(vertices);
+        }
+
         public void WaitForIdle() {
             this.vkDevice.WaitIdle();
         }
@@ -118,6 +132,7 @@ namespace Game.Vulkan {
             this.vkPresentQueue  = this.vkDevice.GetQueue(this.vkQueueFamilies.PresentFamily.Value, 0);
             
             this.createCommandPool();
+            this.createVertexBuffer();
 
             this.createSwapchainPipeline();
 
@@ -396,9 +411,16 @@ namespace Game.Vulkan {
                 fragShaderStageInfo
             };
 
+            var attributes = Vertex.AttributeDescriptions;
+            var bindings   = new Vk.VertexInputBindingDescription[] {
+                Vertex.BindingDescription
+            };
+
             var vertexInputInfo = new Vk.PipelineVertexInputStateCreateInfo();
-            vertexInputInfo.VertexBindingDescriptionCount   = 0;
-            vertexInputInfo.VertexAttributeDescriptionCount = 0;
+            vertexInputInfo.VertexBindingDescriptionCount   = (uint) bindings.Length;
+            vertexInputInfo.VertexBindingDescriptions       = bindings;
+            vertexInputInfo.VertexAttributeDescriptionCount = (uint) attributes.Length;
+            vertexInputInfo.VertexAttributeDescriptions     = attributes;
 
             var inputAssemblyInfo = new Vk.PipelineInputAssemblyStateCreateInfo();
             inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleList;
@@ -531,6 +553,49 @@ namespace Game.Vulkan {
             return framebuffers;
         }
 
+        private void createVertexBuffer() {
+            var bufferInfo = new Vk.BufferCreateInfo();
+            bufferInfo.Size = (ulong) (this.vertices.Count * Marshal.SizeOf<Vertex>());
+            bufferInfo.Usage = Vk.BufferUsageFlags.VertexBuffer;
+            bufferInfo.SharingMode = Vk.SharingMode.Exclusive;
+            
+            try {
+                this.vkVertexBuffer = this.vkDevice.CreateBuffer(bufferInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the vertex buffer.");
+            }
+
+            var memReqs = this.vkDevice.GetBufferMemoryRequirements(this.vkVertexBuffer);
+            var memTypeIndex = VkHelper.FindMemoryType(memReqs.MemoryTypeBits, this.vkPhysicalDevice,
+                    Vk.MemoryPropertyFlags.HostVisible | Vk.MemoryPropertyFlags.HostCoherent);
+
+            var memAllocInfo = new Vk.MemoryAllocateInfo();
+            memAllocInfo.AllocationSize  = memReqs.Size;
+            memAllocInfo.MemoryTypeIndex = memTypeIndex;
+
+            try {
+                this.vkVertexBufferMemory = this.vkDevice.AllocateMemory(memAllocInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while allocating vertex buffer memory.");
+            }
+
+            this.vkDevice.BindBufferMemory(this.vkVertexBuffer, this.vkVertexBufferMemory, 0);
+
+            IntPtr memory = this.vkDevice.MapMemory(this.vkVertexBufferMemory, 0, bufferInfo.Size);
+            var vertexArray = this.vertices.ToArray();
+
+            MemoryManagement.MarshalArray<Vertex>(vertexArray, memory, false);
+
+            Vertex read = Marshal.PtrToStructure<Vertex>(memory);
+            Console.WriteLine(read.Position.X);
+            Console.WriteLine(read.Position.Y);
+            Console.WriteLine(read.Colour.X);
+            Console.WriteLine(read.Colour.Y);
+            Console.WriteLine(read.Colour.Z);
+
+            this.vkDevice.UnmapMemory(this.vkVertexBufferMemory);
+        }
+
         private Vk.CommandBuffer[] createCommandBuffers(SwapchainPipeline swapchainPipeline) {
             var allocInfo = new Vk.CommandBufferAllocateInfo();
             allocInfo.CommandPool        = this.vkCommandPool;
@@ -557,7 +622,7 @@ namespace Game.Vulkan {
                     this.error(result, $"An error occurred while beginning recording for command buffer {i}.");
                 }
 
-                var renderPassInfo = new Vk.RenderPassBeginInfo();
+                var renderPassInfo         = new Vk.RenderPassBeginInfo();
                 renderPassInfo.RenderPass  = swapchainPipeline.RenderPass;
                 renderPassInfo.Framebuffer = swapchainPipeline.Framebuffers[i];
 
@@ -579,7 +644,8 @@ namespace Game.Vulkan {
 
                 buffers[i].CmdBeginRenderPass(renderPassInfo, Vk.SubpassContents.Inline);
                 buffers[i].CmdBindPipeline(Vk.PipelineBindPoint.Graphics, swapchainPipeline.Pipeline);
-                buffers[i].CmdDraw(3, 1, 0, 0);
+                buffers[i].CmdBindVertexBuffer(0, this.vkVertexBuffer, 0);
+                buffers[i].CmdDraw((uint) this.vertices.Count, 1, 0, 0);
                 buffers[i].CmdEndRenderPass();
 
                 try {
@@ -693,6 +759,10 @@ namespace Game.Vulkan {
                 this.vkDevice.DestroyFence(this.vkInFlightFences[i]);
             }
 
+            // Destroy Vertex Buffer and free its allocated memory
+            this.vkDevice.DestroyBuffer(this.vkVertexBuffer);
+            this.vkDevice.FreeMemory(this.vkVertexBufferMemory);
+
             // Destroy Command Pool
             this.vkDevice.DestroyCommandPool(this.vkCommandPool);
 
@@ -714,8 +784,8 @@ namespace Game.Vulkan {
         }
 
         private void error(Vk.ResultException result, string message) {
-            Console.Error.WriteLine(message);
             Console.Error.WriteLine(result.Result);
+            throw new Exception($"[{result.Result}] {message}");
         }
     }
 }

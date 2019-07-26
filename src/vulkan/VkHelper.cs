@@ -203,7 +203,7 @@ namespace Game.Vulkan {
 
         public static Vk.SurfaceFormatKhr SelectSwapSurfaceFormat(Vk.SurfaceFormatKhr[] formats) {
             foreach(Vk.SurfaceFormatKhr format in formats) {
-                if(format.Format == Vk.Format.R8G8B8A8Unorm 
+                if(format.Format == Vk.Format.R8G8B8A8Unorm
                     && format.ColorSpace == Vk.ColorSpaceKhr.SrgbNonlinear) {
                     return format;        
                 }
@@ -252,6 +252,21 @@ namespace Game.Vulkan {
             moduleInfo.CodeSize = new UIntPtr((uint) bytecode.Length);
 
             return device.CreateShaderModule(moduleInfo);
+        }
+
+        public static uint FindMemoryType(uint typeFilter, Vk.PhysicalDevice physicalDevice, 
+                Vk.MemoryPropertyFlags properties) {
+            var memProps = physicalDevice.GetMemoryProperties();
+
+            for(int i = 0; i < memProps.MemoryTypeCount; i++) {
+                bool bitFieldSet = (typeFilter & (1 << i)) != 0;
+                bool hasProperties = (memProps.MemoryTypes[i].PropertyFlags & properties) == properties;
+                if(bitFieldSet && hasProperties) {
+                    return (uint) i;
+                }
+            }
+
+            throw new System.Exception("Failed to find suitable memory type!");
         }
     }
 

@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace Game.Math {
     public class Vector2 {
 
@@ -156,6 +158,19 @@ namespace Game.Math {
         public static Vector2 operator /(Vector2 v1, double s2) =>
             v1 * (1.0 / s2);
 
+        public static implicit operator NativeVector2(Vector2 managed) {
+            var native = new NativeVector2();
+            native.X = (float) managed.X;
+            native.Y = (float) managed.Y;
+            return native;
+        }
+
         #endregion OperatorOverloads
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public class NativeVector2 {
+        public float X;
+        public float Y;
     }
 }

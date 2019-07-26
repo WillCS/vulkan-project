@@ -1,3 +1,6 @@
+using System;
+using System.Runtime.InteropServices;
+
 namespace Game.Math {
 
     public class Vector3 {
@@ -113,10 +116,11 @@ namespace Game.Math {
                 this.X * v.Y - this.Y * v.X);
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Vector3) {
+            if (obj == null || !(obj is Vector3)) {
                 return false;
             }
-            Vector3 v = obj as Vector3;
+
+            Vector3 v = (Vector3) obj;
             return
                 MathHelper.ApproximatelyEqual(this.X, v.X) &&
                 MathHelper.ApproximatelyEqual(this.Y, v.Y) &&
@@ -124,8 +128,7 @@ namespace Game.Math {
         }
         
         public override int GetHashCode() {
-            // redo this :(
-            return double.Parse($"{this.X}.{this.Y}").GetHashCode();
+            return (new double[] {this.X, this.Y, this.Z}).GetHashCode();
         }
 
         public override string ToString() {
@@ -154,6 +157,21 @@ namespace Game.Math {
         public static Vector3 operator /(Vector3 v1, double s2) =>
             v1 * (1.0 / s2);
 
+        public static implicit operator NativeVector3(Vector3 managed) {
+            var native = new NativeVector3();
+            native.X = (float) managed.X;
+            native.Y = (float) managed.Y;
+            native.Z = (float) managed.Z;
+            return native;
+        }
+
         #endregion OperatorOverloads
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct NativeVector3 {
+        public float X;
+        public float Y;
+        public float Z;
     }
 }

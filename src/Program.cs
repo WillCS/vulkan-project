@@ -5,6 +5,7 @@ using Game.Vulkan;
 using Vk = Vulkan;
 using System.Text;
 using System.Collections.Generic;
+using Game.Math;
 
 namespace Game {
     public class Program {
@@ -62,10 +63,31 @@ namespace Game {
 
                 vulkan.EnableValidationLayers();
                 vulkan.RegisterDebugReportCallback(this.DebugReportCallback, 
-                        Vk.DebugReportFlagsExt.Debug);
+                        Vk.DebugReportFlagsExt.Debug |
+                        Vk.DebugReportFlagsExt.Error |
+                        Vk.DebugReportFlagsExt.Information |
+                        Vk.DebugReportFlagsExt.PerformanceWarning |
+                        Vk.DebugReportFlagsExt.Warning);
 
                 vulkan.SetWindow(this.window);
                 vulkan.RegisterPhysicalDeviceSuitabilityCheck(this.CheckPhysicalDeviceSuitability);
+                
+                Vertex v1 = new Vertex();
+                v1.Colour   = new Vector3(1.0, 0.0, 0.0);
+                v1.Position = new Vector2( 0.0, -0.5);
+
+                Vertex v2 = new Vertex();
+                v2.Colour   = new Vector3(0.0, 1.0, 0.0);
+                v2.Position = new Vector2( 0.5,  0.5);
+
+                Vertex v3 = new Vertex();
+                v3.Colour   = new Vector3(0.0, 0.0, 1.0);
+                v3.Position = new Vector2(-0.5,  0.5);
+
+                vulkan.AddVertex(v1);
+                vulkan.AddVertex(v2);
+                vulkan.AddVertex(v3);
+
                 vulkan.InitVulkan();
             } else {
                 Console.WriteLine("No Vulkan :(");
