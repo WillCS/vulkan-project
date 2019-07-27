@@ -93,6 +93,8 @@ namespace Game {
                 vulkan.AddVertex(v3);
                 vulkan.AddVertex(v4);
 
+                vulkan.AddIndices(new short[] { 0, 1, 3, 0, 3, 2 });
+
                 vulkan.InitVulkan();
             } else {
                 Console.WriteLine("No Vulkan :(");

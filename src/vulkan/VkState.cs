@@ -46,8 +46,11 @@ namespace Game.Vulkan {
         public SwapchainPipeline SwapchainPipeline;
 
         private List<Vertex> vertices;
+        private List<short>  indices;
         private Vk.Buffer vkVertexBuffer;
+        private Vk.Buffer vkIndexBuffer;
         private Vk.DeviceMemory vkVertexBufferMemory;
+        private Vk.DeviceMemory vkIndexBufferMemory;
 
         public Vk.CommandPool GraphicsCommandPool;
         public Vk.CommandPool TransferCommandPool;
@@ -59,6 +62,7 @@ namespace Game.Vulkan {
         public VkState() {
             this.physicalDeviceChecks = new List<VkHelper.PhysicalDeviceSuitabilityCheck>();
             this.vertices             = new List<Vertex>();
+            this.indices              = new List<short>();
         }
 
         public void EnableValidationLayers() {
@@ -103,6 +107,14 @@ namespace Game.Vulkan {
             this.vertices.AddRange(vertices);
         }
 
+        public void AddIndex(short index) {
+            this.indices.Add(index);
+        }
+
+        public void AddIndices(IEnumerable<short> indices) {
+            this.indices.AddRange(indices);
+        }
+
         public void WaitForIdle() {
             this.Device.WaitIdle();
         }
@@ -137,6 +149,7 @@ namespace Game.Vulkan {
             this.createGraphicsCommandPool();
             this.createTransferCommandPool();
             this.createVertexBuffer();
+            this.createIndexBuffer();
 
             this.createSwapchainPipeline();
 
@@ -439,7 +452,7 @@ namespace Game.Vulkan {
             vertexInputInfo.VertexAttributeDescriptions     = attributes;
 
             var inputAssemblyInfo = new Vk.PipelineInputAssemblyStateCreateInfo();
-            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleStrip;
+            inputAssemblyInfo.Topology = Vk.PrimitiveTopology.TriangleList;
             inputAssemblyInfo.PrimitiveRestartEnable = false;
 
             Vk.Viewport viewport = new Vk.Viewport();
@@ -574,7 +587,8 @@ namespace Game.Vulkan {
             var transferUsage = Vk.BufferUsageFlags.TransferSrc;
             var vertexUsage = Vk.BufferUsageFlags.VertexBuffer
                     | Vk.BufferUsageFlags.TransferDst;
-            var memoryProps = Vk.MemoryPropertyFlags.HostVisible
+            var transferMemoryProps = Vk.MemoryPropertyFlags.DeviceLocal;
+            var vertexMemoryProps = Vk.MemoryPropertyFlags.HostVisible
                     | Vk.MemoryPropertyFlags.HostCoherent;
             var sharingMode = Vk.SharingMode.Exclusive;
             Vk.DeviceMemory stagingBufferMemory;
@@ -582,7 +596,7 @@ namespace Game.Vulkan {
 
             try {
                 stagingBuffer = VkHelper.CreateBuffer(this, size, transferUsage,
-                        memoryProps, sharingMode, out stagingBufferMemory);
+                        transferMemoryProps, sharingMode, out stagingBufferMemory);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the staging buffer.");
                 return;
@@ -594,13 +608,52 @@ namespace Game.Vulkan {
             this.Device.UnmapMemory(stagingBufferMemory);
             
             try {
-                this.vkVertexBuffer = VkHelper.CreateBuffer(this, size, vertexUsage, memoryProps, 
+                this.vkVertexBuffer = VkHelper.CreateBuffer(this, size, vertexUsage, vertexMemoryProps, 
                         sharingMode, out this.vkVertexBufferMemory);
             } catch(Vk.ResultException result) {
                 this.error(result, "An error occurred while creating the vertex buffer.");
             }
 
             VkHelper.CopyBuffer(stagingBuffer, this.vkVertexBuffer, size, this);
+
+            this.Device.DestroyBuffer(stagingBuffer);
+            this.Device.FreeMemory(stagingBufferMemory);
+        }
+
+        private void createIndexBuffer() {
+            var size = Marshal.SizeOf(typeof(short)) * this.indices.Count;
+            var transferUsage = Vk.BufferUsageFlags.TransferSrc;
+            var indexUsage = Vk.BufferUsageFlags.IndexBuffer
+                    | Vk.BufferUsageFlags.TransferDst;
+            var transferMemoryProps = Vk.MemoryPropertyFlags.DeviceLocal;
+            var vertexMemoryProps = Vk.MemoryPropertyFlags.HostVisible
+                    | Vk.MemoryPropertyFlags.HostCoherent;
+            var sharingMode = Vk.SharingMode.Exclusive;
+
+            Vk.DeviceMemory stagingBufferMemory;
+            Vk.Buffer stagingBuffer;
+
+            try {
+                stagingBuffer = VkHelper.CreateBuffer(this, size, transferUsage,
+                        transferMemoryProps, sharingMode, out stagingBufferMemory);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the staging buffer.");
+                return;
+            }
+
+            IntPtr memory = this.Device.MapMemory(stagingBufferMemory, 0, size);
+            var indexArray = this.indices.ToArray();
+            MemoryManagement.ArrayToPtr<short>(indexArray, memory, false);
+            this.Device.UnmapMemory(stagingBufferMemory);
+            
+            try {
+                this.vkIndexBuffer = VkHelper.CreateBuffer(this, size, indexUsage, vertexMemoryProps, 
+                        sharingMode, out this.vkIndexBufferMemory);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the index buffer.");
+            }
+
+            VkHelper.CopyBuffer(stagingBuffer, this.vkIndexBuffer, size, this);
 
             this.Device.DestroyBuffer(stagingBuffer);
             this.Device.FreeMemory(stagingBufferMemory);
@@ -655,7 +708,8 @@ namespace Game.Vulkan {
                 buffers[i].CmdBeginRenderPass(renderPassInfo, Vk.SubpassContents.Inline);
                 buffers[i].CmdBindPipeline(Vk.PipelineBindPoint.Graphics, swapchainPipeline.Pipeline);
                 buffers[i].CmdBindVertexBuffer(0, this.vkVertexBuffer, 0);
-                buffers[i].CmdDraw((uint) this.vertices.Count, 1, 0, 0);
+                buffers[i].CmdBindIndexBuffer(this.vkIndexBuffer, 0, Vk.IndexType.Uint16);
+                buffers[i].CmdDrawIndexed((uint) this.indices.Count, 1, 0, 0, 0);
                 buffers[i].CmdEndRenderPass();
 
                 try {
@@ -773,8 +827,13 @@ namespace Game.Vulkan {
             this.Device.DestroyBuffer(this.vkVertexBuffer);
             this.Device.FreeMemory(this.vkVertexBufferMemory);
 
-            // Destroy Command Pool
+            // Destroy the Index Buffer and free its allocated memory
+            this.Device.DestroyBuffer(this.vkIndexBuffer);
+            this.Device.FreeMemory(this.vkIndexBufferMemory);
+
+            // Destroy Command Pools
             this.Device.DestroyCommandPool(this.GraphicsCommandPool);
+            this.Device.DestroyCommandPool(this.TransferCommandPool);
 
             // Destroy Logical Device
             this.Device.Destroy();
