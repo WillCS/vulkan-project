@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using Game.Native;
 using Vk = Vulkan;
 
 namespace Game.Vulkan {
@@ -43,6 +44,7 @@ namespace Game.Vulkan {
 
         private List<DebugCallbackData> debugCallbacks;
 
+        public Vk.DescriptorSetLayout DescriptorSetLayout;
         public SwapchainPipeline SwapchainPipeline;
 
         private List<Vertex> vertices;
@@ -150,7 +152,7 @@ namespace Game.Vulkan {
             this.createTransferCommandPool();
             this.createVertexBuffer();
             this.createIndexBuffer();
-
+            this.createDescriptorSetLayout();
             this.createSwapchainPipeline();
 
             this.createSyncObjects();
@@ -275,13 +277,14 @@ namespace Game.Vulkan {
             swapchainPipeline.Extent = extent;
 
             var swapchain = this.createSwapchain(swapchainParameters);
-            swapchainPipeline.Swapchain      = swapchain;
-            swapchainPipeline.Images         = this.Device.GetSwapchainImagesKHR(swapchain);
-            swapchainPipeline.ImageViews     = this.createImageViews(swapchainPipeline);
-            swapchainPipeline.RenderPass     = this.createRenderPass(swapchainPipeline);
-            swapchainPipeline.Pipeline       = this.createGraphicsPipeline(swapchainPipeline);
-            swapchainPipeline.Framebuffers   = this.createFramebuffers(swapchainPipeline);
-            swapchainPipeline.CommandBuffers = this.createCommandBuffers(swapchainPipeline);
+            swapchainPipeline.Swapchain           = swapchain;
+            swapchainPipeline.Images              = this.Device.GetSwapchainImagesKHR(swapchain);
+            swapchainPipeline.ImageViews          = this.createImageViews(swapchainPipeline);
+            swapchainPipeline.UniformBuffers      = this.createUniformBuffers(swapchainPipeline);
+            swapchainPipeline.RenderPass          = this.createRenderPass(swapchainPipeline);
+            swapchainPipeline.Pipeline            = this.createGraphicsPipeline(swapchainPipeline);
+            swapchainPipeline.Framebuffers        = this.createFramebuffers(swapchainPipeline);
+            swapchainPipeline.CommandBuffers      = this.createCommandBuffers(swapchainPipeline);
 
             this.SwapchainPipeline = swapchainPipeline;
             this.swapchainCleanedUp = false;
@@ -418,6 +421,46 @@ namespace Game.Vulkan {
             }
         }
 
+        private void createDescriptorSetLayout() {
+            var uboLayoutBinding = new Vk.DescriptorSetLayoutBinding();
+            uboLayoutBinding.Binding         = 0;
+            uboLayoutBinding.DescriptorType  = Vk.DescriptorType.UniformBuffer;
+            uboLayoutBinding.DescriptorCount = 1;
+            uboLayoutBinding.StageFlags      = Vk.ShaderStageFlags.Vertex;
+
+            var layoutInfo = new Vk.DescriptorSetLayoutCreateInfo();
+            layoutInfo.BindingCount = 1;
+            layoutInfo.Bindings = new Vk.DescriptorSetLayoutBinding[] { uboLayoutBinding };
+
+            try {
+                this.DescriptorSetLayout = this.Device.CreateDescriptorSetLayout(layoutInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the descriptor set layout.");
+            }
+        }
+
+        private Vk.Buffer[] createUniformBuffers(SwapchainPipeline swapchainPipeline) {
+            var bufferSize = Marshal.SizeOf<UniformBufferObject>();
+            var usageFlags = Vk.BufferUsageFlags.UniformBuffer;
+            var memProps   = Vk.MemoryPropertyFlags.HostVisible
+                    | Vk.MemoryPropertyFlags.HostCoherent;
+            var shareMode  = Vk.SharingMode.Exclusive;
+            
+            var uniformBuffers                     = new Vk.Buffer[swapchainPipeline.ImageCapacity];
+            swapchainPipeline.UniformBuffersMemory = new Vk.DeviceMemory[swapchainPipeline.ImageCapacity];
+
+            for(int i = 0; i < swapchainPipeline.ImageCapacity; i++) {
+                try {
+                    uniformBuffers[i] = VkHelper.CreateBuffer(this, bufferSize, usageFlags, 
+                            memProps, shareMode, out swapchainPipeline.UniformBuffersMemory[i]);
+                } catch(Vk.ResultException result) {
+                    this.error(result, $"An error occurred while creating uniform buffer {i}.");
+                }
+            }
+
+            return uniformBuffers;
+        }
+
         private Vk.Pipeline createGraphicsPipeline(SwapchainPipeline swapchainPipeline) {
             byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
             byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
@@ -512,6 +555,8 @@ namespace Game.Vulkan {
             colourBlendStateInfo.Attachments     = colourBlendAttachmentInfos;
 
             var pipelineLayoutInfo = new Vk.PipelineLayoutCreateInfo();
+            pipelineLayoutInfo.SetLayoutCount = 1;
+            pipelineLayoutInfo.SetLayouts     = new Vk.DescriptorSetLayout[] { this.DescriptorSetLayout };
             
             try {
                 swapchainPipeline.PipelineLayout = this.Device.CreatePipelineLayout(pipelineLayoutInfo);
@@ -742,6 +787,10 @@ namespace Game.Vulkan {
                 }
             }
         }
+
+        private void updateUniformBuffer(uint index) {
+            // I have to do complicated matrix math now
+        }
         
         public void DrawFrame() {
             this.Device.WaitForFence(this.vkInFlightFences[this.currentFrame], true, UInt64.MaxValue);
@@ -764,6 +813,8 @@ namespace Game.Vulkan {
 
             var waitSemaphores   = new Vk.Semaphore[] { this.vkImageAvailableSemaphores[this.currentFrame] };
             var signalSemaphores = new Vk.Semaphore[] { this.vkRenderFinishedSemaphores[this.currentFrame] };
+
+            this.updateUniformBuffer(imageIndex);
 
             var submitInfo = new Vk.SubmitInfo();
             submitInfo.CommandBufferCount = 1;
@@ -815,6 +866,8 @@ namespace Game.Vulkan {
 
         public void Cleanup() {
             this.SwapchainPipeline.Cleanup();
+
+            this.Device.DestroyDescriptorSetLayout(this.DescriptorSetLayout);
 
             // Destroy Sync Objects
             for(int i = 0; i < this.maxFramesInFlight; i++) {

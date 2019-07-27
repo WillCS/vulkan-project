@@ -4,8 +4,8 @@ using GLFW;
 using Game.Vulkan;
 using Vk = Vulkan;
 using System.Text;
-using System.Collections.Generic;
 using Game.Math;
+using Game.Native;
 
 namespace Game {
     public class Program {

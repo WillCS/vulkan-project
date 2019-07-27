@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using Game.Native;
 
 namespace Game.Math {
 
@@ -211,6 +212,18 @@ namespace Game.Math {
                 m1.GetRow(1).Dot(v2), 
                 m1.GetRow(2).Dot(v2),
                 m1.GetRow(3).Dot(v2));
+
+        public static implicit operator Mat4(Matrix4 managed) {
+            Mat4 unmanaged = new Mat4();
+
+            for(int row = 0; row < 4; row++) {
+                for(int column = 0; column < 4; column++) {
+                    unmanaged.elems[row * 4 + column] = (float) managed[row, column];
+                }
+            }
+
+            return unmanaged;
+        }
 
         #endregion OperatorOverloads
 

@@ -1,3 +1,5 @@
+using Game.Native;
+
 namespace Game.Math {
 
     public class Vector4 {
@@ -164,6 +166,24 @@ namespace Game.Math {
 
         public static Vector4 operator /(Vector4 v1, double s2) =>
             v1 * (1.0 / s2);
+
+        public static implicit operator Vec4(Vector4 managed) {
+            var native = new Vec4();
+            native.X = (float) managed.X;
+            native.Y = (float) managed.Y;
+            native.Z = (float) managed.Z;
+            native.W = (float) managed.W;
+            return native;
+        }
+
+        public static implicit operator DVec4(Vector4 managed) {
+            var native = new DVec4();
+            native.X = managed.X;
+            native.Y = managed.Y;
+            native.Z = managed.Z;
+            native.W = managed.W;
+            return native;
+        }
 
         #endregion OperatorOverloads
     }

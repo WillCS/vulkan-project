@@ -9,6 +9,7 @@ using GLFW;
 using System.IO;
 using Vk = Vulkan;
 using Microsoft.Win32.SafeHandles;
+using Game.Native;
 
 namespace Game.Vulkan {
     public static class VkHelper {
@@ -370,6 +371,8 @@ namespace Game.Vulkan {
         public Vk.Image[]         Images;
         public Vk.ImageView[]     ImageViews;
         public Vk.Framebuffer[]   Framebuffers;
+        public Vk.Buffer[]        UniformBuffers;
+        public Vk.DeviceMemory[]  UniformBuffersMemory;
 
         public Vk.RenderPass      RenderPass;
         public Vk.PipelineLayout  PipelineLayout;
@@ -408,6 +411,12 @@ namespace Game.Vulkan {
                 this.device.DestroyImageView(imageView);
             }
 
+            // Destroy Uniform Buffers and free their memory
+            for(int i = 0; i < this.ImageCapacity; i++) {
+                this.device.DestroyBuffer(this.UniformBuffers[i]);
+                this.device.FreeMemory(this.UniformBuffersMemory[i]);
+            }
+
             // Destroy Swapchain
             this.device.DestroySwapchainKHR(this.Swapchain);
         }
@@ -420,5 +429,13 @@ namespace Game.Vulkan {
         public uint                        MinImageCount;
         public uint                        MaxImageCount;
         public Vk.SurfaceTransformFlagsKhr CurrentTransform;
+    }
+
+    
+    [StructLayout(LayoutKind.Sequential)]
+    public struct UniformBufferObject {
+        public Mat4 Model;
+        public Mat4 View;
+        public Mat4 Projection;
     }
 }

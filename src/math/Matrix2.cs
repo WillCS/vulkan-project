@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using Game.Native;
 
 namespace Game.Math {
     public class Matrix2 {
@@ -176,6 +177,16 @@ namespace Game.Math {
 
         public static Vector2 operator *(Matrix2 m1, Vector2 v2) =>
             new Vector2(m1.a * v2.X + m1.b * v2.Y, m1.c * v2.X + m1.d * v2.Y);
+
+        public static implicit operator Mat2(Matrix2 managed) {
+            Mat2 unmanaged = new Mat2();
+            unmanaged.A = (float) managed.a;
+            unmanaged.B = (float) managed.b;
+            unmanaged.C = (float) managed.c;
+            unmanaged.D = (float) managed.d;
+
+            return unmanaged;
+        }
 
         #endregion OperatorOverloads
 
