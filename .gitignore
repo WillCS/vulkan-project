@@ -1,6 +1,7 @@
-/bin
-/obj
+bin
+obj
 omnisharp\.json
 *\.spv
 \.vscode
 *\.vktrace
+TestResult.xml

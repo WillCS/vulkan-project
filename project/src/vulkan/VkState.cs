@@ -524,8 +524,8 @@ namespace Project.Vulkan {
         }
 
         private Vk.Pipeline createGraphicsPipeline(ref SwapchainPipeline swapchainPipeline) {
-            byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
-            byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
+            byte[] fragBytecode = VkHelper.LoadShaderCode("project/bin/frag.spv");
+            byte[] vertBytecode = VkHelper.LoadShaderCode("project/bin/vert.spv");
 
             Vk.ShaderModule fragModule = VkHelper.CreateShaderModule(this.Device, fragBytecode);
             Vk.ShaderModule vertModule = VkHelper.CreateShaderModule(this.Device, vertBytecode);
@@ -855,7 +855,6 @@ namespace Project.Vulkan {
         private void updateUniformBuffer(uint index) {
             double timeNow = GLFW.Glfw.Time;
             double dt = timeNow - this.startTime;
-            Console.WriteLine(dt);
 
             var ubo   = new UniformBufferObject();
             ubo.Model = Matrices.ZRotationMatrix4(dt);

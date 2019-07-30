@@ -1,29 +1,41 @@
-COMPILE_GLSL = glslangValidator -V
-COMPILE_MONO = msbuild
-EXECUTE_MONO = mono
-SRC_DIR = src
-SHADER_DIR = shaders
-CSPROJ_FILE = project.csproj
-OUTPUT_DIR = bin
+COMPILE_GLSL 	= glslangValidator -V
+COMPILE_MONO 	= msbuild
+EXECUTE_MONO 	= mono
+PROJECT_DIR  	= project
+TEST_DIR		= test
+SRC_DIR 	 	= src
+SHADER_DIR   	= shaders
+SLN_FILE 		= project.sln
+OUTPUT_DIR 		= bin
 MONO_OUTPUT_DIR = Debug/net472
-EXECUTABLE = project.exe
+EXECUTABLE 		= project.exe
+TESTS			= test.dll
+MONO			= mono
+NUNIT_CONSOLE	= /home/will/.nuget/packages/nunit.consolerunner/3.10.0/tools/nunit3-console.exe
 
 build: compileShaders
 	$(COMPILE_MONO) $(CSPROJ_FILE)
+
+debugBuild: compileShaders
+	$(COMPILE_MONO) /p:Configuration=Debug $(CSPROJ_FILE)
+
+test: debugBuild
+	$(MONO) $(NUNIT_CONSOLE) $(TEST_DIR)/$(OUTPUT_DIR)/$(MONO_OUTPUT_DIR)/$(TESTS)
 
 restore:
 	dotnet restore
 
 run: build
-	$(EXECUTE_MONO) $(OUTPUT_DIR)/$(MONO_OUTPUT_DIR)/$(EXECUTABLE)
+	$(EXECUTE_MONO) $(PROJECT_DIR)/$(OUTPUT_DIR)/$(MONO_OUTPUT_DIR)/$(EXECUTABLE)
 
-compileShaders: $(SRC_DIR)/$(SHADER_DIR)/triangle.frag $(SRC_DIR)/$(SHADER_DIR)/triangle.vert $(OUTPUT_DIR)
-	$(COMPILE_GLSL) $(SRC_DIR)/$(SHADER_DIR)/triangle.frag -o $(OUTPUT_DIR)/frag.spv
-	$(COMPILE_GLSL) $(SRC_DIR)/$(SHADER_DIR)/triangle.vert -o $(OUTPUT_DIR)/vert.spv
+compileShaders: $(PROJECT_DIR)/$(SRC_DIR)/$(SHADER_DIR)/triangle.frag $(PROJECT_DIR)/$(SRC_DIR)/$(SHADER_DIR)/triangle.vert $(PROJECT_DIR)/$(OUTPUT_DIR)
+	$(COMPILE_GLSL) $(PROJECT_DIR)/$(SRC_DIR)/$(SHADER_DIR)/triangle.frag -o $(PROJECT_DIR)/$(OUTPUT_DIR)/frag.spv
+	$(COMPILE_GLSL) $(PROJECT_DIR)/$(SRC_DIR)/$(SHADER_DIR)/triangle.vert -o $(PROJECT_DIR)/$(OUTPUT_DIR)/vert.spv
 
-$(OUTPUT_DIR):
-	mkdir $(OUTPUT_DIR)
+$(PROJECT_DIR)/$(OUTPUT_DIR):
+	mkdir $(PROJECT_DIR)/$(OUTPUT_DIR)
 
 clean:
-	rm -rf $(OUTPUT_DIR)
-	rm mono_crash\.*\.json
+	rm -rf $(PROJECT_DIR)/$(OUTPUT_DIR)
+	rm -rf $(TEST_DIR)/$(OUTPUT_DIR)
+	rm $(PROJECT_DIR)/mono_crash\.*\.json
