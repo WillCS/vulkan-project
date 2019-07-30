@@ -1,4 +1,4 @@
-namespace Game.Vulkan {
+namespace Project.Vulkan {
     public static class VkConstants {
         public static readonly uint   VK_SUBPASS_EXTERNAL = ~0U;
 

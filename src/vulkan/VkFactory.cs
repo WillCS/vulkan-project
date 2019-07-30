@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Vk = Vulkan;
 
-namespace Game.Vulkan {
+namespace Project.Vulkan {
     public class InstanceBuilder {
 
         private Vk.ApplicationInfo appInfo;

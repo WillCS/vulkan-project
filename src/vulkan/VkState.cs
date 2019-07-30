@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using Game.Native;
+using Project.Native;
 using Vk = Vulkan;
 
-namespace Game.Vulkan {
+namespace Project.Vulkan {
     public class VkState {
 
         public int maxFramesInFlight = 2;

@@ -1,13 +1,13 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using GLFW;
-using Game.Vulkan;
+using Project.Vulkan;
 using Vk = Vulkan;
 using System.Text;
-using Game.Math;
-using Game.Native;
+using Project.Math;
+using Project.Native;
 
-namespace Game {
+namespace Project {
     public class Program {
         public static int WIDTH = 640;
         public static int HEIGHT = 480;
@@ -43,7 +43,7 @@ namespace Game {
 
             Glfw.Init();
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.None);
-            Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
+            // Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
             
             this.timeLastLoop = Glfw.Time;
 

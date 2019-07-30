@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Vk = Vulkan;
 
-namespace Game.Native {
+namespace Project.Native {
     [StructLayout(LayoutKind.Sequential)]
     public struct Vertex {
         public Vec2 Position;

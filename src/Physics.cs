@@ -1,8 +1,8 @@
-using Game.Math;
+using Project.Math;
 using System.Collections.Generic;
 using System;
 
-namespace Game.Physics {
+namespace Project.Physics {
     public interface IPhysicsShape {
         Vector2 Position { get; set; }
 
@@ -137,7 +137,7 @@ namespace Game.Physics {
         }
 
         public void Rotate(double rotation) {
-            Matrix2 rotationMatrix = Matrix2.RotationMatrix(rotation);
+            Matrix2 rotationMatrix = Matrices.RotationMatrix2(rotation);
             for(int i = 0; i < this.points.Length; i++) {
                 this.points[i] = rotationMatrix * this.points[i];
             }
@@ -300,7 +300,7 @@ namespace Game.Physics {
 
         public void Rotate(double rotation) {
             Vector2 delta = this.End - this.Start;
-            Matrix2 rotationMatrix = Matrix2.RotationMatrix(rotation);
+            Matrix2 rotationMatrix = Matrices.RotationMatrix2(rotation);
             Vector2 rotatedDelta = rotationMatrix * delta;
             this.End = this.Start + rotatedDelta;
         }

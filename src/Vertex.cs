@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
-using Game.Math;
-using Game.Native;
+using Project.Math;
+using Project.Native;
 using Vk = Vulkan;
 
-namespace Game {
+namespace Project {
 }

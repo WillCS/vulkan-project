@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Game.Math.Graph {
+namespace Project.Math.Graph {
     public interface IGraph<T> where T : IVertex<T> {
         IEnumerable<T> Vertices {
             get;

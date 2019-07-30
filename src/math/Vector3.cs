@@ -1,8 +1,8 @@
 using System;
 using System.Runtime.InteropServices;
-using Game.Native;
+using Project.Native;
 
-namespace Game.Math {
+namespace Project.Math {
 
     public class Vector3 {
 

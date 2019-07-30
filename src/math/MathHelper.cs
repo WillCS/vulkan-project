@@ -1,4 +1,4 @@
-namespace Game.Math {
+namespace Project.Math {
     public static class MathHelper {
         public static readonly double EPSILON = 0.001D;
 

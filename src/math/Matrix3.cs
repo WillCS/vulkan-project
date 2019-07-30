@@ -1,8 +1,8 @@
 using System;
 using System.Linq;
-using Game.Native;
+using Project.Native;
 
-namespace Game.Math {
+namespace Project.Math {
 
     public class Matrix3 {
 
@@ -150,6 +150,47 @@ namespace Game.Math {
         #endregion Methods
 
         #region StaticFunctions
+
+        public static Matrix3 GetXRotationMatrix(double angle) {
+            var cos = System.Math.Cos(angle);
+            var sin = System.Math.Sin(angle);
+
+            return new Matrix3(new double[] {
+                1,   0,    0,
+                0, cos, -sin,
+                0, sin,  cos
+            });
+        }
+
+        public static Matrix3 GetYRotationMatrix(double angle) {
+            var cos = System.Math.Cos(angle);
+            var sin = System.Math.Sin(angle);
+
+            return new Matrix3(new double[] {
+                 cos, 0, sin,
+                   0, 1,   0,
+                -sin, 0, cos
+            });
+        }
+
+        public static Matrix3 GetZRotationMatrix(double angle) {
+            var cos = System.Math.Cos(angle);
+            var sin = System.Math.Sin(angle);
+
+            return new Matrix3(new double[] {
+                cos, -sin, 0,
+                sin,  cos, 0,
+                  0,    0, 1
+            });
+        }
+
+        public static Matrix3 GetRotationMatrix(double x, double y, double z) {
+            var rotX = GetXRotationMatrix(x);
+            var rotY = GetYRotationMatrix(y);
+            var rotZ = GetZRotationMatrix(z);
+
+            return rotZ * rotY * rotX;
+        }
 
         #region OperatorOverloads
 

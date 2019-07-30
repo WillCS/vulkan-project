@@ -4,14 +4,14 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
-using Game.Math;
+using Project.Math;
 using GLFW;
 using System.IO;
 using Vk = Vulkan;
 using Microsoft.Win32.SafeHandles;
-using Game.Native;
+using Project.Native;
 
-namespace Game.Vulkan {
+namespace Project.Vulkan {
     public static class VkHelper {
          [DllImport(Glfw.LIBRARY, EntryPoint = "glfwGetRequiredInstanceExtensions",
             CallingConvention = CallingConvention.Cdecl)]

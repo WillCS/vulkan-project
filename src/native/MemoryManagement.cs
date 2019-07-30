@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace Game {
+namespace Project {
     public static class MemoryManagement {
         public static void ArrayToPtr<T>(T[] array, IntPtr address, bool deleteOld) {
             int size = Marshal.SizeOf(typeof(T));

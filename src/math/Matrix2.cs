@@ -2,9 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Game.Native;
+using Project.Native;
 
-namespace Game.Math {
+namespace Project.Math {
     public class Matrix2 {
 
         #region StaticFields
@@ -141,12 +141,6 @@ namespace Game.Math {
         #endregion Methods
 
         #region StaticFunctions
-
-        public static Matrix2 RotationMatrix(double angle) {
-            double sin = System.Math.Sin(angle);
-            double cos = System.Math.Cos(angle);
-            return new Matrix2(cos, -sin, sin, cos);
-        }
 
         #region OperatorOverloads
 

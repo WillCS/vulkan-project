@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using Game.Math;
+using Project.Math;
 
-namespace Game {
+namespace Project {
     public class Floor {
 
         private int xSize;
