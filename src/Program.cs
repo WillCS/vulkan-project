@@ -43,7 +43,7 @@ namespace Project {
 
             Glfw.Init();
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.None);
-            // Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
+            Glfw.WindowHint(Hint.Resizable, GLFW.Constants.False);
             
             this.timeLastLoop = Glfw.Time;
 

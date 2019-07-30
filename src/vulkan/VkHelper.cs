@@ -373,6 +373,8 @@ namespace Project.Vulkan {
         public Vk.Framebuffer[]   Framebuffers;
         public Vk.Buffer[]        UniformBuffers;
         public Vk.DeviceMemory[]  UniformBuffersMemory;
+        public Vk.DescriptorPool  DescriptorPool;
+        public Vk.DescriptorSet[] DescriptorSets;
 
         public Vk.RenderPass      RenderPass;
         public Vk.PipelineLayout  PipelineLayout;
@@ -416,6 +418,9 @@ namespace Project.Vulkan {
                 this.device.DestroyBuffer(this.UniformBuffers[i]);
                 this.device.FreeMemory(this.UniformBuffersMemory[i]);
             }
+
+            // Destroy Descriptor Pool
+            this.device.DestroyDescriptorPool(this.DescriptorPool);
 
             // Destroy Swapchain
             this.device.DestroySwapchainKHR(this.Swapchain);

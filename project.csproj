@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net472</TargetFramework>
-    <RootNamespace>Game</RootNamespace>
+    <RootNamespace>Project</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
+using Project.Math;
 using Project.Native;
 using Vk = Vulkan;
 
@@ -61,10 +63,13 @@ namespace Project.Vulkan {
         private Vk.Semaphore[] vkRenderFinishedSemaphores;
         private Vk.Fence[] vkInFlightFences;
 
+        private double startTime;
+
         public VkState() {
             this.physicalDeviceChecks = new List<VkHelper.PhysicalDeviceSuitabilityCheck>();
             this.vertices             = new List<Vertex>();
             this.indices              = new List<short>();
+            this.startTime = GLFW.Glfw.Time;
         }
 
         public void EnableValidationLayers() {
@@ -280,9 +285,11 @@ namespace Project.Vulkan {
             swapchainPipeline.Swapchain           = swapchain;
             swapchainPipeline.Images              = this.Device.GetSwapchainImagesKHR(swapchain);
             swapchainPipeline.ImageViews          = this.createImageViews(swapchainPipeline);
-            swapchainPipeline.UniformBuffers      = this.createUniformBuffers(swapchainPipeline);
+            swapchainPipeline.UniformBuffers      = this.createUniformBuffers(ref swapchainPipeline);
+            swapchainPipeline.DescriptorPool      = this.createDescriptorPool(swapchainPipeline);
+            swapchainPipeline.DescriptorSets      = this.createDescriptorSets(swapchainPipeline);
             swapchainPipeline.RenderPass          = this.createRenderPass(swapchainPipeline);
-            swapchainPipeline.Pipeline            = this.createGraphicsPipeline(swapchainPipeline);
+            swapchainPipeline.Pipeline            = this.createGraphicsPipeline(ref swapchainPipeline);
             swapchainPipeline.Framebuffers        = this.createFramebuffers(swapchainPipeline);
             swapchainPipeline.CommandBuffers      = this.createCommandBuffers(swapchainPipeline);
 
@@ -439,7 +446,7 @@ namespace Project.Vulkan {
             }
         }
 
-        private Vk.Buffer[] createUniformBuffers(SwapchainPipeline swapchainPipeline) {
+        private Vk.Buffer[] createUniformBuffers(ref SwapchainPipeline swapchainPipeline) {
             var bufferSize = Marshal.SizeOf<UniformBufferObject>();
             var usageFlags = Vk.BufferUsageFlags.UniformBuffer;
             var memProps   = Vk.MemoryPropertyFlags.HostVisible
@@ -461,7 +468,62 @@ namespace Project.Vulkan {
             return uniformBuffers;
         }
 
-        private Vk.Pipeline createGraphicsPipeline(SwapchainPipeline swapchainPipeline) {
+        private Vk.DescriptorPool createDescriptorPool(SwapchainPipeline swapchainPipeline) {
+            var poolSize = new Vk.DescriptorPoolSize();
+            poolSize.Type = Vk.DescriptorType.UniformBuffer;
+            poolSize.DescriptorCount = swapchainPipeline.ImageCapacity;
+
+            var poolInfo = new Vk.DescriptorPoolCreateInfo();
+            poolInfo.PoolSizeCount = 1;
+            poolInfo.PoolSizes     = new Vk.DescriptorPoolSize[] { poolSize };
+            poolInfo.MaxSets       = swapchainPipeline.ImageCapacity;
+
+            try {
+                return this.Device.CreateDescriptorPool(poolInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the descriptor pool.");
+                return null;
+            }
+        }
+
+        private Vk.DescriptorSet[] createDescriptorSets(SwapchainPipeline swapchainPipeline) {
+            var allocInfo = new Vk.DescriptorSetAllocateInfo();
+            allocInfo.DescriptorPool = swapchainPipeline.DescriptorPool;
+            allocInfo.DescriptorSetCount = swapchainPipeline.ImageCapacity;
+            allocInfo.SetLayouts = 
+                (from i in Enumerable.Range(0, (int) swapchainPipeline.ImageCapacity) 
+                select this.DescriptorSetLayout).ToArray();
+
+            Vk.DescriptorSet[] descriptorSets;
+
+            try {
+                descriptorSets = this.Device.AllocateDescriptorSets(allocInfo);
+            } catch(Vk.ResultException result) {
+                this.error(result, "An error occurred while creating the descriptor sets.");
+                return null;
+            }
+
+            for(int i = 0; i < swapchainPipeline.ImageCapacity; i++) {
+                var bufferInfo = new Vk.DescriptorBufferInfo();
+                bufferInfo.Buffer = swapchainPipeline.UniformBuffers[i];
+                bufferInfo.Offset = 0;
+                bufferInfo.Range  = Marshal.SizeOf<UniformBufferObject>();
+
+                var descriptorWrite = new Vk.WriteDescriptorSet();
+                descriptorWrite.DstSet          = descriptorSets[i];
+                descriptorWrite.DstBinding      = 0;
+                descriptorWrite.DstArrayElement = 0;
+                descriptorWrite.DescriptorType  = Vk.DescriptorType.UniformBuffer;
+                descriptorWrite.DescriptorCount = 1;
+                descriptorWrite.BufferInfo      = new Vk.DescriptorBufferInfo[] { bufferInfo };
+
+                this.Device.UpdateDescriptorSet(descriptorWrite, null);
+            }
+
+            return descriptorSets;
+        }
+
+        private Vk.Pipeline createGraphicsPipeline(ref SwapchainPipeline swapchainPipeline) {
             byte[] fragBytecode = VkHelper.LoadShaderCode("bin/frag.spv");
             byte[] vertBytecode = VkHelper.LoadShaderCode("bin/vert.spv");
 
@@ -522,8 +584,8 @@ namespace Project.Vulkan {
             rasteriserInfo.RasterizerDiscardEnable = false;
             rasteriserInfo.PolygonMode             = Vk.PolygonMode.Fill;
             rasteriserInfo.LineWidth               = 1.0F;
-            rasteriserInfo.CullMode                = Vk.CullModeFlags.Back;
-            rasteriserInfo.FrontFace               = Vk.FrontFace.Clockwise;
+            rasteriserInfo.CullMode                = Vk.CullModeFlags.Front;
+            rasteriserInfo.FrontFace               = Vk.FrontFace.CounterClockwise;
             rasteriserInfo.DepthBiasEnable         = false;
 
             var multisamplingInfo = new Vk.PipelineMultisampleStateCreateInfo();
@@ -754,6 +816,8 @@ namespace Project.Vulkan {
                 buffers[i].CmdBindPipeline(Vk.PipelineBindPoint.Graphics, swapchainPipeline.Pipeline);
                 buffers[i].CmdBindVertexBuffer(0, this.vkVertexBuffer, 0);
                 buffers[i].CmdBindIndexBuffer(this.vkIndexBuffer, 0, Vk.IndexType.Uint16);
+                buffers[i].CmdBindDescriptorSet(Vk.PipelineBindPoint.Graphics,
+                        swapchainPipeline.PipelineLayout, 0, swapchainPipeline.DescriptorSets[i], null);
                 buffers[i].CmdDrawIndexed((uint) this.indices.Count, 1, 0, 0, 0);
                 buffers[i].CmdEndRenderPass();
 
@@ -789,7 +853,21 @@ namespace Project.Vulkan {
         }
 
         private void updateUniformBuffer(uint index) {
-            // I have to do complicated matrix math now
+            double timeNow = GLFW.Glfw.Time;
+            double dt = timeNow - this.startTime;
+            Console.WriteLine(dt);
+
+            var ubo   = new UniformBufferObject();
+            ubo.Model = Matrices.ZRotationMatrix4(dt);
+            ubo.View  = Matrix4.IDENTITY;
+            ubo.Projection = Matrix4.IDENTITY; //Matrices.PerspectiveProjectionMatrix(0.1, 10.0, 
+                    // this.SwapchainPipeline.Extent.Width / (double) this.SwapchainPipeline.Extent.Height,
+                    // 90.0);
+
+            var memory  = this.SwapchainPipeline.UniformBuffersMemory[index];
+            var address = this.Device.MapMemory(memory, 0, Marshal.SizeOf<UniformBufferObject>());
+            Marshal.StructureToPtr<UniformBufferObject>(ubo, address, false);
+            this.Device.UnmapMemory(memory);
         }
         
         public void DrawFrame() {

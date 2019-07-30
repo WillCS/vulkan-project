@@ -85,7 +85,7 @@ namespace Project.Math {
 
             Matrix4 projection = Matrix4.ZERO;
             projection[0, 0] = aspect * fovScaleFactor * (right - left);
-            projection[1, 1] = fovScaleFactor * (bottom - top);
+            projection[1, 1] = -fovScaleFactor * (bottom - top);
             projection[2, 2] = -far / (far - near);
             projection[3, 2] = -(far * near) / (far - near);
             projection[2, 3] = -1;
