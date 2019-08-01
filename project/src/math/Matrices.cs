@@ -94,8 +94,8 @@ namespace Project.Math {
 
             double a = f / aspect;
             double b = f;
-            double c = -(near + far) * range;
-            double d = -near * far * range * 2;
+            double c = (near + far) * range;
+            double d = near * far * range * 2;
             
             var matrix = new Matrix4(new double[] {
                 a, 0,  0, 0,
@@ -115,8 +115,8 @@ namespace Project.Math {
                 double width, double height, bool correctForVulkan = true) {
             double a = (2 * near) / width;
             double b = (2 * near) / height;
-            double c = -2 / (far - near);
-            double d = -(far + near) / (far - near);
+            double c = 2 / (far - near);
+            double d = (far + near) / (far - near);
 
             var matrix = new Matrix4(new double[] {
                 a, 0, 0, 0,

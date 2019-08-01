@@ -77,62 +77,62 @@ namespace Project {
 
                 Vertex x1   = new Vertex();
                 x1.Colour   = Vector3.UNIT_X;
-                x1.Position = new Vector3(-100, 0, -100);
+                x1.Position = new Vector3(-100, 0, -5);
                 vertices.Add(x1);
 
                 Vertex x2   = new Vertex();
                 x2.Colour   = Vector3.UNIT_X;
-                x2.Position = new Vector3(-100, 0,  100);
+                x2.Position = new Vector3(-100, 0,  5);
                 vertices.Add(x2);
                 
                 Vertex x3   = new Vertex();
                 x3.Colour   = Vector3.UNIT_X;
-                x3.Position = new Vector3( 100, 0, -100);
+                x3.Position = new Vector3( 100, 0, -5);
                 vertices.Add(x3);
                 
                 Vertex x4   = new Vertex();
                 x4.Colour   = Vector3.UNIT_X;
-                x4.Position = new Vector3( 100, 0,  100);
+                x4.Position = new Vector3( 100, 0,  5);
                 vertices.Add(x4);
 
                 Vertex y1   = new Vertex();
                 y1.Colour   = Vector3.UNIT_Y;
-                y1.Position = new Vector3(0, -100, -100);
+                y1.Position = new Vector3(-5, -100, 0);
                 vertices.Add(y1);
 
                 Vertex y2   = new Vertex();
                 y2.Colour   = Vector3.UNIT_Y;
-                y2.Position = new Vector3(0, -100,  100);
+                y2.Position = new Vector3( 5, -100, 0);
                 vertices.Add(y2);
                 
                 Vertex y3   = new Vertex();
                 y3.Colour   = Vector3.UNIT_Y;
-                y3.Position = new Vector3(0,  100, -100);
+                y3.Position = new Vector3(-5,  100, 0);
                 vertices.Add(y3);
                 
                 Vertex y4   = new Vertex();
                 y4.Colour   = Vector3.UNIT_Y;
-                y4.Position = new Vector3(0,  100, 100);
+                y4.Position = new Vector3( 5,  100, 0);
                 vertices.Add(y4);
 
                 Vertex z1   = new Vertex();
                 z1.Colour   = Vector3.UNIT_Z;
-                z1.Position = new Vector3(-100, -100, 0);
+                z1.Position = new Vector3(0, -5, -100);
                 vertices.Add(z1);
 
                 Vertex z2   = new Vertex();
                 z2.Colour   = Vector3.UNIT_Z;
-                z2.Position = new Vector3( 100, -100, 0);
+                z2.Position = new Vector3(0, -5,  100);
                 vertices.Add(z2);
                 
                 Vertex z3   = new Vertex();
                 z3.Colour   = Vector3.UNIT_Z;
-                z3.Position = new Vector3(-100,  100, 0);
+                z3.Position = new Vector3(0,  5, -100);
                 vertices.Add(z3);
                 
                 Vertex z4   = new Vertex();
                 z4.Colour   = Vector3.UNIT_Z;
-                z4.Position = new Vector3( 100,  100, 0);
+                z4.Position = new Vector3(0,  5,  100);
                 vertices.Add(z4);
 
                 vulkan.AddVertices(vertices);
@@ -141,7 +141,7 @@ namespace Project {
                         0, 1, 3,
                         0, 3, 2,
                         3, 1, 0,
-                        2, 3, 1,
+                        2, 3, 0,
 
                         4, 5, 7,
                         4, 7, 6,

@@ -1000,11 +1000,17 @@ namespace Project.Vulkan {
             double dt = timeNow - this.startTime;
 
             var ubo   = new UniformBufferObject();
-            ubo.Model = Matrices.YRotationMatrix4(dt / 20);
-            ubo.View  = Matrices.LookAtMatrix(new Vector3(100, -100, 100), Vector3.ZERO);
-            ubo.Projection = Matrices.PerspectiveProjectionMatrix(1, 2000, 640 / 480.0,
+
+            var model = Matrices.YRotationMatrix4(dt);
+            ubo.Model = model;
+            
+            var view = Matrices.LookAtMatrix(new Vector3(100, 100, 100), Vector3.ZERO);
+            ubo.View = view;
+
+            var projection = Matrices.PerspectiveProjectionMatrix(0.01, 400, 1.25,
                     System.Math.PI / 2);
-            // ubo.Projection = Matrices.OrthographicProjectionMatrix(0.01, 200, 64, 48);
+            // var projection = Matrices.OrthographicProjectionMatrix(0.01, 100, 3.2, 2.4);
+            ubo.Projection = projection;
 
             var memory  = this.SwapchainPipeline.UniformBuffersMemory[index];
             var address = this.Device.MapMemory(memory, 0, Marshal.SizeOf<UniformBufferObject>());

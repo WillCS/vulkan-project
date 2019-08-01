@@ -225,7 +225,7 @@ namespace Project.Math {
 
             for(int row = 0; row < 3; row++) {
                 for(int column = 0; column < 3; column++) {
-                    unmanaged.elems[row * 3 + column] = (float) managed[row, column];
+                    unmanaged.elems[row * 3 + column] = (float) managed[column, row];
                 }
             }
 
