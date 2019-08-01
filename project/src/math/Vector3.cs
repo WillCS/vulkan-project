@@ -105,6 +105,12 @@ namespace Project.Math {
             this.Z = z;
         }
 
+        public Vector3(Vector2 xy, double z) {
+            this.X = xy.X;
+            this.Y = xy.Y;
+            this.Z = z;
+        }
+
         #region Methods
 
         public double Dot(Vector3 v) =>

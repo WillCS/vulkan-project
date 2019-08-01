@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using Project.Native;
 
 namespace Project.Math {
@@ -20,7 +21,7 @@ namespace Project.Math {
 
         #region PrivateFields
 
-        // Column Major
+        // Row Major
         private double[] elements;
 
         #endregion PrivateFields
@@ -110,18 +111,13 @@ namespace Project.Math {
         }
 
         public double this[int row, int column] {
-            get => this.elements[row + 4 * column];
-            set => this.elements[row + 4 * column] = value;
+            get => this.elements[row * 4 + column];
+            set => this.elements[row * 4 + column] = value;
         }
 
         public Vector4 GetRow(int row) {
             if(row == 0 || row == 1 || row == 2 || row == 3) {
-                int elementIndex = row;
-                return new Vector4(
-                        elementIndex,
-                        elementIndex + 4,
-                        elementIndex + 8,
-                        elementIndex + 12);
+                return new Vector4(this[row, 0], this[row, 1], this[row, 2], this[row, 3]);
             } else {
                 throw new IndexOutOfRangeException($"3x3 matrix does not have a row {row}.");
             }
@@ -129,31 +125,44 @@ namespace Project.Math {
 
         public Vector4 GetColumn(int column) {
             if(column == 0 || column == 1 || column == 2 || column == 3) {
-                int elementIndex = column * 3;
-                return new Vector4(
-                        elementIndex,
-                        elementIndex + 1,
-                        elementIndex + 2,
-                        elementIndex + 3);
+                return new Vector4(this[0, column], this[1, column], this[2, column], this[3, column]);
             } else {
                 throw new IndexOutOfRangeException($"3x3 matrix does not have a column {column}.");
             }
         }
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Matrix4) {
+            if (obj == null || !(obj is Matrix4)) {
                 return false;
             }
 
             Matrix4 m = obj as Matrix4;
             return m.elements.Select<double, bool>((double element, int index) => 
                 MathHelper.ApproximatelyEqual(element, this.elements[index])
-            ).Count() == 16;
+            ).All((bool isTrue) => isTrue);
 
         }
 
         public override int GetHashCode() {
             return this.elements.GetHashCode();
+        }
+
+        public override string ToString() {
+            StringBuilder builder = new StringBuilder();
+
+            for(int row = 0; row < 4; row++) {
+                builder.Append("[ ");
+                for(int col = 0; col < 4; col++) {
+                    builder.Append($"{this[row, col]} ");
+                }
+                builder.Append("]");
+
+                if(row != 3) {
+                    builder.Append(" ");
+                }
+            }
+
+            return builder.ToString();
         }
 
         #endregion Methods
@@ -166,7 +175,7 @@ namespace Project.Math {
             double[] elements = new double[16];
 
             for(int i = 0; i < 16; i++) {
-                elements[i] = m1.elements[i] + m1.elements[i];
+                elements[i] = m1.elements[i] + m2.elements[i];
             }
 
             return new Matrix4(elements);

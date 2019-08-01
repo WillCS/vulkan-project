@@ -187,6 +187,96 @@ namespace Project.Vulkan {
             }
         }
 
+        public Vk.CommandBuffer BeginSingleTimeCommands(Vk.CommandPool commandPool) {
+            var allocInfo = new Vk.CommandBufferAllocateInfo();
+            allocInfo.Level = Vk.CommandBufferLevel.Primary;
+            allocInfo.CommandPool = commandPool;
+            allocInfo.CommandBufferCount = 1;
+
+            var buffer = this.Device.AllocateCommandBuffers(allocInfo)[0];
+
+            var beginInfo = new Vk.CommandBufferBeginInfo();
+            beginInfo.Flags = Vk.CommandBufferUsageFlags.OneTimeSubmit;
+
+            buffer.Begin(beginInfo);
+            return buffer;
+        }
+
+        public void EndSingleTimeCommands(Vk.Queue queue, 
+                Vk.CommandPool commandPool, Vk.CommandBuffer buffer) {
+            buffer.End();
+
+            var submitInfo = new Vk.SubmitInfo();
+            submitInfo.CommandBufferCount = 1;
+            submitInfo.CommandBuffers = new Vk.CommandBuffer[] { buffer };
+            
+            queue.Submit(new Vk.SubmitInfo[] { submitInfo });
+            queue.WaitIdle();
+            this.Device.FreeCommandBuffer(commandPool, buffer);
+        }
+
+        public void TransitionImageLayout(Vk.Image image, Vk.Format format,
+                Vk.ImageLayout oldLayout, Vk.ImageLayout newLayout) {
+            var buffer = this.BeginSingleTimeCommands(this.GraphicsCommandPool);
+
+            var subresourceRange = new Vk.ImageSubresourceRange();
+
+            if(newLayout == Vk.ImageLayout.DepthStencilAttachmentOptimal) {
+                subresourceRange.AspectMask     = Vk.ImageAspectFlags.Depth;
+
+                if(VkHelper.HasStencilComponent(format)) {
+                    subresourceRange.AspectMask |= Vk.ImageAspectFlags.Stencil;
+                }
+            } else {
+                subresourceRange.AspectMask = Vk.ImageAspectFlags.Color;
+            }
+            
+            subresourceRange.BaseMipLevel   = 0;
+            subresourceRange.LevelCount     = 1;
+            subresourceRange.BaseArrayLayer = 0;
+            subresourceRange.LayerCount     = 1;
+
+            Vk.PipelineStageFlags srcStage;
+            Vk.PipelineStageFlags dstStage;
+
+            var barrier = new Vk.ImageMemoryBarrier();
+            barrier.OldLayout = oldLayout;
+            barrier.NewLayout = newLayout;
+            barrier.SrcQueueFamilyIndex = VkConstants.VK_QUEUE_FAMILY_IGNORED;
+            barrier.DstQueueFamilyIndex = VkConstants.VK_QUEUE_FAMILY_IGNORED;
+
+            if(oldLayout == Vk.ImageLayout.Undefined && newLayout == Vk.ImageLayout.TransferDstOptimal) {
+                barrier.SrcAccessMask = 0;
+                barrier.DstAccessMask = Vk.AccessFlags.TransferWrite;
+
+                srcStage = Vk.PipelineStageFlags.TopOfPipe;
+                dstStage = Vk.PipelineStageFlags.Transfer; 
+            } else if(oldLayout == Vk.ImageLayout.TransferDstOptimal && newLayout == Vk.ImageLayout.ShaderReadOnlyOptimal) {
+                barrier.SrcAccessMask = Vk.AccessFlags.TransferWrite;
+                barrier.DstAccessMask = Vk.AccessFlags.ShaderRead;
+
+                srcStage = Vk.PipelineStageFlags.Transfer;
+                dstStage = Vk.PipelineStageFlags.FragmentShader;
+            } else if(oldLayout == Vk.ImageLayout.Undefined && newLayout == Vk.ImageLayout.DepthStencilAttachmentOptimal) {
+                barrier.SrcAccessMask = 0;
+                barrier.DstAccessMask = Vk.AccessFlags.DepthStencilAttachmentRead
+                        | Vk.AccessFlags.DepthStencilAttachmentWrite;
+
+                srcStage = Vk.PipelineStageFlags.TopOfPipe;
+                dstStage = Vk.PipelineStageFlags.EarlyFragmentTests;
+            } else {
+                throw new Exception("Unsupported layout transition.");
+            }
+
+            barrier.Image            = image;
+            barrier.SubresourceRange = subresourceRange;
+
+            buffer.CmdPipelineBarrier(srcStage, dstStage, 0, null, null, 
+                    new Vk.ImageMemoryBarrier[] { barrier });
+
+            this.EndSingleTimeCommands(this.GraphicsQueue, this.GraphicsCommandPool, buffer);
+        }
+
         private void createWindowSurface() {
             try {
                 IntPtr allocatorPointer = IntPtr.Zero;
@@ -290,6 +380,9 @@ namespace Project.Vulkan {
             swapchainPipeline.DescriptorSets      = this.createDescriptorSets(swapchainPipeline);
             swapchainPipeline.RenderPass          = this.createRenderPass(swapchainPipeline);
             swapchainPipeline.Pipeline            = this.createGraphicsPipeline(ref swapchainPipeline);
+
+            this.createDepthResources(ref swapchainPipeline);
+
             swapchainPipeline.Framebuffers        = this.createFramebuffers(swapchainPipeline);
             swapchainPipeline.CommandBuffers      = this.createCommandBuffers(swapchainPipeline);
 
@@ -391,12 +484,27 @@ namespace Project.Vulkan {
             colourAttachmentRef.Attachment = 0;
             colourAttachmentRef.Layout     = Vk.ImageLayout.ColorAttachmentOptimal;
 
+            var depthAttachment = new Vk.AttachmentDescription();
+            depthAttachment.Format         = VkHelper.FindDepthFormat(this);
+            depthAttachment.Samples        = Vk.SampleCountFlags.Count1;
+            depthAttachment.LoadOp         = Vk.AttachmentLoadOp.Clear;
+            depthAttachment.StoreOp        = Vk.AttachmentStoreOp.DontCare;
+            depthAttachment.StencilLoadOp  = Vk.AttachmentLoadOp.DontCare;
+            depthAttachment.StencilStoreOp = Vk.AttachmentStoreOp.DontCare;
+            depthAttachment.InitialLayout  = Vk.ImageLayout.Undefined;
+            depthAttachment.FinalLayout    = Vk.ImageLayout.DepthStencilAttachmentOptimal;
+
+            var depthAttachmentRef = new Vk.AttachmentReference();
+            depthAttachmentRef.Attachment = 1;
+            depthAttachmentRef.Layout     = Vk.ImageLayout.DepthStencilAttachmentOptimal;
+
             var subpass = new Vk.SubpassDescription();
-            subpass.PipelineBindPoint    = Vk.PipelineBindPoint.Graphics;
-            subpass.ColorAttachmentCount = 1;
-            subpass.ColorAttachments     = new Vk.AttachmentReference[] {
+            subpass.PipelineBindPoint      = Vk.PipelineBindPoint.Graphics;
+            subpass.ColorAttachmentCount   = 1;
+            subpass.ColorAttachments       = new Vk.AttachmentReference[] {
                 colourAttachmentRef
             };
+            subpass.DepthStencilAttachment = depthAttachmentRef;
 
             var subpassDep = new Vk.SubpassDependency();
             subpassDep.SrcSubpass    = VkConstants.VK_SUBPASS_EXTERNAL;
@@ -407,9 +515,10 @@ namespace Project.Vulkan {
             subpassDep.DstAccessMask = Vk.AccessFlags.ColorAttachmentRead | Vk.AccessFlags.ColorAttachmentWrite;
 
             var renderPassInfo = new Vk.RenderPassCreateInfo();
-            renderPassInfo.AttachmentCount = 1;
+            renderPassInfo.AttachmentCount = 2;
             renderPassInfo.Attachments     = new Vk.AttachmentDescription[] {
-                colourAttachment
+                colourAttachment,
+                depthAttachment
             };
             renderPassInfo.SubpassCount    = 1;
             renderPassInfo.Subpasses       = new Vk.SubpassDescription[] {
@@ -466,6 +575,24 @@ namespace Project.Vulkan {
             }
 
             return uniformBuffers;
+        }
+
+        private void createDepthResources(ref SwapchainPipeline swapchainPipeline) {
+            var depthFormat = VkHelper.FindDepthFormat(this);
+            Vk.DeviceMemory depthMemory;
+            var depthImage = VkHelper.CreateImage(this,
+                    swapchainPipeline.Extent.Width, swapchainPipeline.Extent.Height,
+                    depthFormat, Vk.ImageTiling.Optimal, Vk.ImageUsageFlags.DepthStencilAttachment,
+                    Vk.MemoryPropertyFlags.DeviceLocal, out depthMemory);
+            var depthImageView = VkHelper.CreateImageView(this, depthImage, depthFormat,
+                    Vk.ImageAspectFlags.Depth);
+
+            this.TransitionImageLayout(depthImage, depthFormat, Vk.ImageLayout.Undefined,
+                    Vk.ImageLayout.DepthStencilAttachmentOptimal);
+
+            swapchainPipeline.DepthImage       = depthImage;
+            swapchainPipeline.DepthImageMemory = depthMemory;
+            swapchainPipeline.DepthImageView   = depthImageView;
         }
 
         private Vk.DescriptorPool createDescriptorPool(SwapchainPipeline swapchainPipeline) {
@@ -584,8 +711,8 @@ namespace Project.Vulkan {
             rasteriserInfo.RasterizerDiscardEnable = false;
             rasteriserInfo.PolygonMode             = Vk.PolygonMode.Fill;
             rasteriserInfo.LineWidth               = 1.0F;
-            rasteriserInfo.CullMode                = Vk.CullModeFlags.Front;
-            rasteriserInfo.FrontFace               = Vk.FrontFace.CounterClockwise;
+            rasteriserInfo.CullMode                = Vk.CullModeFlags.Back;
+            rasteriserInfo.FrontFace               = Vk.FrontFace.Clockwise;
             rasteriserInfo.DepthBiasEnable         = false;
 
             var multisamplingInfo = new Vk.PipelineMultisampleStateCreateInfo();
@@ -627,6 +754,13 @@ namespace Project.Vulkan {
                 return null;
             }
 
+            var depthStencil = new Vk.PipelineDepthStencilStateCreateInfo();
+            depthStencil.DepthTestEnable = true;
+            depthStencil.DepthWriteEnable = true;
+            depthStencil.DepthCompareOp = Vk.CompareOp.Less;
+            depthStencil.DepthBoundsTestEnable = false;
+            depthStencil.StencilTestEnable = false;
+
             var pipelineInfo = new Vk.GraphicsPipelineCreateInfo();
             pipelineInfo.StageCount         = 2;
             pipelineInfo.Stages             = shaderStageInfos;
@@ -635,7 +769,7 @@ namespace Project.Vulkan {
             pipelineInfo.ViewportState      = viewportStateInfo;
             pipelineInfo.RasterizationState = rasteriserInfo;
             pipelineInfo.MultisampleState   = multisamplingInfo;
-            pipelineInfo.DepthStencilState  = null;
+            pipelineInfo.DepthStencilState  = depthStencil;
             pipelineInfo.ColorBlendState    = colourBlendStateInfo;
             pipelineInfo.DynamicState       = null;
             pipelineInfo.Layout             = swapchainPipeline.PipelineLayout;
@@ -667,12 +801,13 @@ namespace Project.Vulkan {
 
             for(uint i = 0; i < swapchainPipeline.ImageCapacity; i++) {
                 Vk.ImageView[] attachments = new Vk.ImageView[] {
-                    swapchainPipeline.ImageViews[i]
+                    swapchainPipeline.ImageViews[i],
+                    swapchainPipeline.DepthImageView
                 };
 
                 var framebufferInfo = new Vk.FramebufferCreateInfo();
                 framebufferInfo.RenderPass      = swapchainPipeline.RenderPass;
-                framebufferInfo.AttachmentCount = 1;
+                framebufferInfo.AttachmentCount = 2;
                 framebufferInfo.Attachments     = attachments;
                 framebufferInfo.Width           = swapchainPipeline.Extent.Width;
                 framebufferInfo.Height          = swapchainPipeline.Extent.Height;
@@ -806,10 +941,18 @@ namespace Project.Vulkan {
                 renderArea.Offset.X      = 0;
                 renderArea.Offset.Y      = 0;
 
+                var clearDepth = new Vk.ClearValue();
+
+                var depth = new Vk.ClearDepthStencilValue();
+                depth.Depth   = 1;
+
+                clearDepth.DepthStencil = depth;
+
                 renderPassInfo.RenderArea      = renderArea;
-                renderPassInfo.ClearValueCount = 1;
+                renderPassInfo.ClearValueCount = 2;
                 renderPassInfo.ClearValues     = new Vk.ClearValue[] {
-                    clearColour
+                    clearColour,
+                    clearDepth
                 };
 
                 buffers[i].CmdBeginRenderPass(renderPassInfo, Vk.SubpassContents.Inline);
@@ -857,11 +1000,11 @@ namespace Project.Vulkan {
             double dt = timeNow - this.startTime;
 
             var ubo   = new UniformBufferObject();
-            ubo.Model = Matrices.ZRotationMatrix4(dt);
-            ubo.View  = Matrix4.IDENTITY;
-            ubo.Projection = Matrix4.IDENTITY; //Matrices.PerspectiveProjectionMatrix(0.1, 10.0, 
-                    // this.SwapchainPipeline.Extent.Width / (double) this.SwapchainPipeline.Extent.Height,
-                    // 90.0);
+            ubo.Model = Matrices.YRotationMatrix4(dt / 20);
+            ubo.View  = Matrices.LookAtMatrix(new Vector3(100, -100, 100), Vector3.ZERO);
+            ubo.Projection = Matrices.PerspectiveProjectionMatrix(1, 2000, 640 / 480.0,
+                    System.Math.PI / 2);
+            // ubo.Projection = Matrices.OrthographicProjectionMatrix(0.01, 200, 64, 48);
 
             var memory  = this.SwapchainPipeline.UniformBuffersMemory[index];
             var address = this.Device.MapMemory(memory, 0, Marshal.SizeOf<UniformBufferObject>());

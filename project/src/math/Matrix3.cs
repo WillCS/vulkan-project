@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using Project.Native;
 
 namespace Project.Math {
@@ -20,7 +21,7 @@ namespace Project.Math {
 
         #region PrivateFields
 
-        // Column Major
+        // Row Major
         private double[] elements;
 
         #endregion PrivateFields
@@ -109,37 +110,35 @@ namespace Project.Math {
         }
 
         public double this[int row, int column] {
-            get => this.elements[row + 3 * column];
-            set => this.elements[row + 3 * column] = value;
+            get => this.elements[row * 3 + column];
+            set => this.elements[row * 3 + column] = value;
         }
 
         public Vector3 GetRow(int row) {
             if(row == 0 || row == 1 || row == 2) {
-                int elementIndex = row;
-                return new Vector3(elementIndex, elementIndex + 3, elementIndex + 6);
+                return new Vector3(this[row, 0], this[row, 1], this[row, 2]);
             } else {
-                throw new IndexOutOfRangeException($"2x2 matrix does not have a row {row}.");
+                throw new IndexOutOfRangeException($"3x3 matrix does not have a row {row}.");
             }
         }
 
         public Vector3 GetColumn(int column) {
             if(column == 0 || column == 1 || column == 2) {
-                int elementIndex = column * 3;
-                return new Vector3(elementIndex, elementIndex + 1, elementIndex + 2);
+                return new Vector3(this[0, column], this[1, column], this[2, column]);
             } else {
-                throw new IndexOutOfRangeException($"2x2 matrix does not have a column {column}.");
+                throw new IndexOutOfRangeException($"3x3 matrix does not have a column {column}.");
             }
         }
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Matrix3) {
+            if (obj == null || !(obj is Matrix3)) {
                 return false;
             }
 
             Matrix3 m = obj as Matrix3;
             return m.elements.Select<double, bool>((double element, int index) => 
                 MathHelper.ApproximatelyEqual(element, this.elements[index])
-            ).Count() == 9;
+            ).All((bool isTrue) => isTrue);
 
         }
 
@@ -147,50 +146,27 @@ namespace Project.Math {
             return this.elements.GetHashCode();
         }
 
+        public override string ToString() {
+            StringBuilder builder = new StringBuilder();
+
+            for(int row = 0; row < 3; row++) {
+                builder.Append("[ ");
+                for(int col = 0; col < 3; col++) {
+                    builder.Append($"{this[row, col]} ");
+                }
+                builder.Append("]");
+
+                if(row != 2) {
+                    builder.Append(" ");
+                }
+            }
+
+            return builder.ToString();
+        }
+
         #endregion Methods
 
         #region StaticFunctions
-
-        public static Matrix3 GetXRotationMatrix(double angle) {
-            var cos = System.Math.Cos(angle);
-            var sin = System.Math.Sin(angle);
-
-            return new Matrix3(new double[] {
-                1,   0,    0,
-                0, cos, -sin,
-                0, sin,  cos
-            });
-        }
-
-        public static Matrix3 GetYRotationMatrix(double angle) {
-            var cos = System.Math.Cos(angle);
-            var sin = System.Math.Sin(angle);
-
-            return new Matrix3(new double[] {
-                 cos, 0, sin,
-                   0, 1,   0,
-                -sin, 0, cos
-            });
-        }
-
-        public static Matrix3 GetZRotationMatrix(double angle) {
-            var cos = System.Math.Cos(angle);
-            var sin = System.Math.Sin(angle);
-
-            return new Matrix3(new double[] {
-                cos, -sin, 0,
-                sin,  cos, 0,
-                  0,    0, 1
-            });
-        }
-
-        public static Matrix3 GetRotationMatrix(double x, double y, double z) {
-            var rotX = GetXRotationMatrix(x);
-            var rotY = GetYRotationMatrix(y);
-            var rotZ = GetZRotationMatrix(z);
-
-            return rotZ * rotY * rotX;
-        }
 
         #region OperatorOverloads
 
@@ -198,7 +174,7 @@ namespace Project.Math {
             double[] elements = new double[9];
 
             for(int i = 0; i < 9; i++) {
-                elements[i] = m1.elements[i] + m1.elements[i];
+                elements[i] = m1.elements[i] + m2.elements[i];
             }
 
             return new Matrix3(elements);

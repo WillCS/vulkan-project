@@ -6,6 +6,7 @@ using Vk = Vulkan;
 using System.Text;
 using Project.Math;
 using Project.Native;
+using System.Collections.Generic;
 
 namespace Project {
     public class Program {
@@ -72,28 +73,86 @@ namespace Project {
                 vulkan.SetWindow(this.window);
                 vulkan.RegisterPhysicalDeviceSuitabilityCheck(this.CheckPhysicalDeviceSuitability);
                 
-                Vertex v1 = new Vertex();
-                v1.Colour   = new Vector3(1.0, 0.0, 0.0);
-                v1.Position = new Vector2(-0.5, -0.5);
+                var vertices = new List<Vertex>();
 
-                Vertex v2 = new Vertex();
-                v2.Colour   = new Vector3(0.0, 1.0, 0.0);
-                v2.Position = new Vector2( 0.5, -0.5);
+                Vertex x1   = new Vertex();
+                x1.Colour   = Vector3.UNIT_X;
+                x1.Position = new Vector3(-100, 0, -100);
+                vertices.Add(x1);
 
-                Vertex v3 = new Vertex();
-                v3.Colour   = new Vector3(0.0, 0.0, 1.0);
-                v3.Position = new Vector2(-0.5,  0.5);
+                Vertex x2   = new Vertex();
+                x2.Colour   = Vector3.UNIT_X;
+                x2.Position = new Vector3(-100, 0,  100);
+                vertices.Add(x2);
+                
+                Vertex x3   = new Vertex();
+                x3.Colour   = Vector3.UNIT_X;
+                x3.Position = new Vector3( 100, 0, -100);
+                vertices.Add(x3);
+                
+                Vertex x4   = new Vertex();
+                x4.Colour   = Vector3.UNIT_X;
+                x4.Position = new Vector3( 100, 0,  100);
+                vertices.Add(x4);
 
-                Vertex v4 = new Vertex();
-                v4.Colour   = new Vector3(0.0, 1.0, 1.0);
-                v4.Position = new Vector2( 0.5,  0.5);
+                Vertex y1   = new Vertex();
+                y1.Colour   = Vector3.UNIT_Y;
+                y1.Position = new Vector3(0, -100, -100);
+                vertices.Add(y1);
 
-                vulkan.AddVertex(v1);
-                vulkan.AddVertex(v2);
-                vulkan.AddVertex(v3);
-                vulkan.AddVertex(v4);
+                Vertex y2   = new Vertex();
+                y2.Colour   = Vector3.UNIT_Y;
+                y2.Position = new Vector3(0, -100,  100);
+                vertices.Add(y2);
+                
+                Vertex y3   = new Vertex();
+                y3.Colour   = Vector3.UNIT_Y;
+                y3.Position = new Vector3(0,  100, -100);
+                vertices.Add(y3);
+                
+                Vertex y4   = new Vertex();
+                y4.Colour   = Vector3.UNIT_Y;
+                y4.Position = new Vector3(0,  100, 100);
+                vertices.Add(y4);
 
-                vulkan.AddIndices(new short[] { 0, 1, 3, 0, 3, 2 });
+                Vertex z1   = new Vertex();
+                z1.Colour   = Vector3.UNIT_Z;
+                z1.Position = new Vector3(-100, -100, 0);
+                vertices.Add(z1);
+
+                Vertex z2   = new Vertex();
+                z2.Colour   = Vector3.UNIT_Z;
+                z2.Position = new Vector3( 100, -100, 0);
+                vertices.Add(z2);
+                
+                Vertex z3   = new Vertex();
+                z3.Colour   = Vector3.UNIT_Z;
+                z3.Position = new Vector3(-100,  100, 0);
+                vertices.Add(z3);
+                
+                Vertex z4   = new Vertex();
+                z4.Colour   = Vector3.UNIT_Z;
+                z4.Position = new Vector3( 100,  100, 0);
+                vertices.Add(z4);
+
+                vulkan.AddVertices(vertices);
+
+                vulkan.AddIndices(new short[] { 
+                        0, 1, 3,
+                        0, 3, 2,
+                        3, 1, 0,
+                        2, 3, 1,
+
+                        4, 5, 7,
+                        4, 7, 6,
+                        7, 5, 4,
+                        6, 7, 4,
+
+                        8, 9, 11,
+                        8, 11, 10,
+                        11, 9, 8,
+                        10, 11, 8 
+                });
 
                 vulkan.InitVulkan();
             } else {

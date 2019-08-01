@@ -42,7 +42,7 @@ namespace Project.Math {
         }
 
         public Matrix2 Inverse {
-            get => this.Determinant * new Matrix2(this.d, -this.b, -this.c, this.a);
+            get => new Matrix2(this.d, -this.b, -this.c, this.a) / this.Determinant;
         }
 
         #endregion Properties
@@ -118,7 +118,7 @@ namespace Project.Math {
         }
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Matrix2) {
+            if (obj == null || !(obj is Matrix2)) {
                 return false;
             }
 
@@ -137,6 +137,9 @@ namespace Project.Math {
 
             return new Vector2(code1, code2).GetHashCode();
         }
+
+        public override string ToString()
+            => $"[ {this.a} {this.b} ] [ {this.c} {this.d} ]";
 
         #endregion Methods
 
@@ -163,8 +166,8 @@ namespace Project.Math {
             new Matrix2(
                 m1.a * m2.a + m1.b * m2.c, 
                 m1.a * m2.b + m1.b * m2.d,
-                m1.b * m2.a + m1.d * m2.c,
-                m1.b * m2.b + m1.d * m2.d);
+                m1.c * m2.a + m1.d * m2.c,
+                m1.c * m2.b + m1.d * m2.d);
 
         public static Matrix2 operator /(Matrix2 m1, double s2) =>
             m1 * (1 / s2);

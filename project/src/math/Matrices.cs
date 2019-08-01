@@ -1,3 +1,5 @@
+using System;
+
 namespace Project.Math {
     public static class Matrices {
         public static Matrix2 RotationMatrix2(double angle) {
@@ -75,22 +77,82 @@ namespace Project.Math {
         public static Matrix4 RotationMatrix4(double x, double y, double z) =>
                 FromMatrix3(RotationMatrix3(x, y, z));
 
+        public static Matrix4 TranslationMatrix4(double x, double y, double z) =>
+                new Matrix4(
+                        Vector4.UNIT_X, 
+                        Vector4.UNIT_Y, 
+                        Vector4.UNIT_Z, 
+                        new Vector4(x, y, z, 1));
+
+        public static Matrix4 TranslationMatrix4(Vector3 translation) =>
+                TranslationMatrix4(translation.X, translation.Y, translation.Z);
+
         public static Matrix4 PerspectiveProjectionMatrix(double near, double far, 
-                double aspect, double fov) {
-            double fovScaleFactor = 1/(System.Math.Tan(fov / 2.0));
-            double left = -1;
-            double right = 1;
-            double top = -1;
-            double bottom = 1;
+                double aspect, double fov, bool correctForVulkan = true) {
+            double f = System.Math.Tan(fov / 2.0);
+            double range = 1 / (near - far);
 
-            Matrix4 projection = Matrix4.ZERO;
-            projection[0, 0] = aspect * fovScaleFactor * (right - left);
-            projection[1, 1] = -fovScaleFactor * (bottom - top);
-            projection[2, 2] = -far / (far - near);
-            projection[3, 2] = -(far * near) / (far - near);
-            projection[2, 3] = -1;
+            double a = f / aspect;
+            double b = f;
+            double c = -(near + far) * range;
+            double d = -near * far * range * 2;
+            
+            var matrix = new Matrix4(new double[] {
+                a, 0,  0, 0,
+                0, b,  0, 0,
+                0, 0,  c, d,
+                0, 0, -1, 0
+            });
 
-            return projection;
+            if(correctForVulkan) {
+                return VulkanProjectionCorrectionMatrix() * matrix;
+            } else {
+                return matrix;
+            }
         }
+
+        public static Matrix4 OrthographicProjectionMatrix(double near, double far, 
+                double width, double height, bool correctForVulkan = true) {
+            double a = (2 * near) / width;
+            double b = (2 * near) / height;
+            double c = -2 / (far - near);
+            double d = -(far + near) / (far - near);
+
+            var matrix = new Matrix4(new double[] {
+                a, 0, 0, 0,
+                0, b, 0, 0,
+                0, 0, c, d,
+                0, 0, 0, 1
+            });
+
+            if(correctForVulkan) {
+                return VulkanProjectionCorrectionMatrix() * matrix;
+            } else {
+                return matrix;
+            }
+        }
+
+        public static Matrix4 VulkanProjectionCorrectionMatrix() {
+            return new Matrix4(new double[] {
+                1,  0,   0,   0,
+                0, -1,   0,   0,
+                0,  0, 0.5, 0.5,
+                0,  0,   0,   1
+            });
+        }
+
+        public static Matrix4 LookAtMatrix(Vector3 camera, Vector3 target, Vector3 up) {
+            var zRotation = (target - camera).Normal;
+            var xRotation = (up.Cross(zRotation)).Normal;
+            var yRotation = zRotation.Cross(xRotation);
+
+            var rotationMatrix = FromMatrix3(new Matrix3(xRotation, yRotation, zRotation).Transpose);
+            var translationMatrix = TranslationMatrix4(-camera);
+
+            return translationMatrix * rotationMatrix;
+        }
+
+        public static Matrix4 LookAtMatrix(Vector3 camera, Vector3 target) =>
+                LookAtMatrix(camera, target, Vector3.UNIT_Y);
     }
 }

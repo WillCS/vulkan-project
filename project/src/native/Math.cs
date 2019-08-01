@@ -4,7 +4,7 @@ using Vk = Vulkan;
 namespace Project.Native {
     [StructLayout(LayoutKind.Sequential)]
     public struct Vertex {
-        public Vec2 Position;
+        public Vec3 Position;
         public Vec3 Colour;
 
         public static Vk.VertexInputBindingDescription BindingDescription {
@@ -26,7 +26,7 @@ namespace Project.Native {
                 // Position
                 descriptions[0].Binding  = 0;
                 descriptions[0].Location = 0;
-                descriptions[0].Format   = Vk.Format.R32G32Sfloat;
+                descriptions[0].Format   = Vk.Format.R32G32B32Sfloat;
                 descriptions[0].Offset   = (uint) Marshal.OffsetOf<Vertex>("Position");
 
                 // Colour

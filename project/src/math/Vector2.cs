@@ -119,7 +119,7 @@ namespace Project.Math {
             this.X * v.X + this.Y * v.Y;
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Vector2) {
+            if (obj == null || !(obj is Vector2)) {
                 return false;
             }
             Vector2 v = obj as Vector2;

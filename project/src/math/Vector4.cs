@@ -119,13 +119,27 @@ namespace Project.Math {
             this.W = w;
         }
 
+        public Vector4(Vector3 xyz, double w) {
+            this.X = xyz.X;
+            this.Y = xyz.Y;
+            this.Z = xyz.Z;
+            this.w = w;
+        }
+
+        public Vector4(Vector2 xy, double z, double w) {
+            this.X = xy.X;
+            this.Y = xy.Y;
+            this.Z = z;
+            this.w = w;
+        }
+
         #region Methods
 
         public double Dot(Vector4 v) =>
             this.X * v.X + this.Y * v.Y + this.Z * v.Z + this.W * v.W;
 
         public override bool Equals(object obj) {
-            if (obj == null || obj is Vector4) {
+            if (obj == null || !(obj is Vector4)) {
                 return false;
             }
             Vector4 v = obj as Vector4;

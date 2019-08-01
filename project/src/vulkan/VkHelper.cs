@@ -186,17 +186,7 @@ namespace Project.Vulkan {
 
         public static void CopyBuffer(Vk.Buffer src, Vk.Buffer dest, Vk.DeviceSize size,
                 VkState state) {
-            var allocInfo = new Vk.CommandBufferAllocateInfo();
-            allocInfo.Level              = Vk.CommandBufferLevel.Primary;
-            allocInfo.CommandPool        = state.TransferCommandPool;
-            allocInfo.CommandBufferCount = 1;
-
-            var commandBuffer = state.Device.AllocateCommandBuffers(allocInfo)[0];
-
-            var beginInfo   = new Vk.CommandBufferBeginInfo();
-            beginInfo.Flags = Vk.CommandBufferUsageFlags.OneTimeSubmit;
-
-            commandBuffer.Begin(beginInfo);
+            var commandBuffer = state.BeginSingleTimeCommands(state.TransferCommandPool);
 
             var copyRegion       = new Vk.BufferCopy();
             copyRegion.SrcOffset = 0;
@@ -204,16 +194,8 @@ namespace Project.Vulkan {
             copyRegion.Size      = size;
 
             commandBuffer.CmdCopyBuffer(src, dest, copyRegion);
-            commandBuffer.End();
 
-            var submitInfo = new Vk.SubmitInfo();
-            submitInfo.CommandBufferCount = 1;
-            submitInfo.CommandBuffers = new Vk.CommandBuffer[] { commandBuffer };
-
-            state.TransferQueue.Submit(submitInfo);
-            state.TransferQueue.WaitIdle();
-
-            state.Device.FreeCommandBuffer(state.TransferCommandPool, commandBuffer);
+            state.EndSingleTimeCommands(state.TransferQueue, state.TransferCommandPool, commandBuffer);
         }
 
         public static IntPtr InstancePointer(Vk.Instance instance) =>
@@ -323,6 +305,83 @@ namespace Project.Vulkan {
 
             throw new System.Exception("Failed to find suitable memory type!");
         }
+
+        public static Vk.Image CreateImage(VkState state, uint width, uint height, Vk.Format format,
+                Vk.ImageTiling tiling, Vk.ImageUsageFlags usageFlags, Vk.MemoryPropertyFlags props,
+                out Vk.DeviceMemory imageMemory) {
+            var extent = new Vk.Extent3D();
+            extent.Width  = width;
+            extent.Height = height;
+            extent.Depth = 1;
+
+            var imageInfo = new Vk.ImageCreateInfo();
+            imageInfo.ImageType     = Vk.ImageType.Image2D;
+            imageInfo.Extent        = extent;
+            imageInfo.MipLevels     = 1;
+            imageInfo.ArrayLayers   = 1;
+            imageInfo.Format        = format;
+            imageInfo.Tiling        = tiling;
+            imageInfo.InitialLayout = Vk.ImageLayout.Undefined;
+            imageInfo.Usage         = usageFlags;
+            imageInfo.Samples       = Vk.SampleCountFlags.Count1;
+            imageInfo.SharingMode   = Vk.SharingMode.Exclusive;
+
+            var image      = state.Device.CreateImage(imageInfo);
+            var memoryReqs = state.Device.GetImageMemoryRequirements(image);
+
+            var allocInfo = new Vk.MemoryAllocateInfo();
+            allocInfo.AllocationSize = memoryReqs.Size;
+            allocInfo.MemoryTypeIndex = FindMemoryType(memoryReqs.MemoryTypeBits, 
+                    state.PhysicalDevice, props);
+
+            imageMemory = state.Device.AllocateMemory(allocInfo);
+            state.Device.BindImageMemory(image, imageMemory, 0);
+
+            return image;
+        }
+
+        public static Vk.ImageView CreateImageView(VkState state, Vk.Image image, Vk.Format format,
+                Vk.ImageAspectFlags aspectFlags) {
+            var subresourceRange = new Vk.ImageSubresourceRange();
+            subresourceRange.AspectMask     = aspectFlags;
+            subresourceRange.BaseMipLevel   = 0;
+            subresourceRange.LevelCount     = 1;
+            subresourceRange.BaseArrayLayer = 0;
+            subresourceRange.LayerCount     = 1;
+
+            var viewInfo = new Vk.ImageViewCreateInfo();
+            viewInfo.Image            = image;
+            viewInfo.ViewType         = Vk.ImageViewType.View2D;
+            viewInfo.Format           = format;
+            viewInfo.SubresourceRange = subresourceRange;
+
+            return state.Device.CreateImageView(viewInfo);
+        }
+
+        public static Vk.Format FindSupportedFormat(VkState state, IEnumerable<Vk.Format> candidates,
+                Vk.ImageTiling tiling, Vk.FormatFeatureFlags features) {
+            foreach(Vk.Format format in candidates) {
+                var props = state.PhysicalDevice.GetFormatProperties(format);
+
+                if(tiling == Vk.ImageTiling.Linear && (props.LinearTilingFeatures & features) != 0) {
+                    return format;
+                } else if(tiling == Vk.ImageTiling.Optimal && (props.OptimalTilingFeatures & features) != 0) {
+                    return format;
+                }
+            }
+
+            throw new System.Exception("Failed to find a supported format.");
+        }
+
+        public static Vk.Format FindDepthFormat(VkState state) =>
+            FindSupportedFormat(state, new Vk.Format[] {
+                Vk.Format.D32Sfloat,
+                Vk.Format.D32SfloatS8Uint,
+                Vk.Format.D24UnormS8Uint }, 
+                Vk.ImageTiling.Optimal, Vk.FormatFeatureFlags.DepthStencilAttachment);
+
+        public static bool HasStencilComponent(Vk.Format format) =>
+                format == Vk.Format.D32SfloatS8Uint || format == Vk.Format.D24UnormS8Uint;
     }
 
     public struct DebugCallbackArgs {
@@ -375,6 +434,10 @@ namespace Project.Vulkan {
         public Vk.DeviceMemory[]  UniformBuffersMemory;
         public Vk.DescriptorPool  DescriptorPool;
         public Vk.DescriptorSet[] DescriptorSets;
+
+        public Vk.Image           DepthImage;
+        public Vk.DeviceMemory    DepthImageMemory;
+        public Vk.ImageView       DepthImageView;
 
         public Vk.RenderPass      RenderPass;
         public Vk.PipelineLayout  PipelineLayout;
