@@ -519,13 +519,13 @@ namespace Project.Vulkan {
 
             var ubo   = new UniformBufferObject();
 
-            var model = Matrix4.IDENTITY; //Matrices.YRotationMatrix4(dt);
+            var model = Matrices.YRotationMatrix4(dt);
             ubo.Model = model;
             
             var view = Matrices.LookAtMatrix(new Vector3(100, 100, 100), Vector3.ZERO);
             ubo.View = view;
 
-            var projection = Matrices.PerspectiveProjectionMatrix(0.01, 500, 1.25,
+            var projection = Matrices.PerspectiveProjectionMatrix(0.01, 900, 1.25,
                     System.Math.PI / 2);
             // var projection = Matrices.OrthographicProjectionMatrix(0.01, 100, 3.2, 2.4);
             ubo.Projection = projection;

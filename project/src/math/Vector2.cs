@@ -81,7 +81,7 @@ namespace Project.Math {
             }
         }
 
-        private double Direction {
+        public double Direction {
             get {
                 if(this.directionHasChanged) {
                     this.direction = System.Math.Atan2(this.Y, this.X);

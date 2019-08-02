@@ -164,7 +164,7 @@ namespace Project.Math {
         #region OperatorOverloads
 
         public static Vector4 operator +(Vector4 v1, Vector4 v2) =>
-            new Vector4(v1.X + v2.X, v1.Y + v2.Y, v1.Z + v2.Z, v1.W + v1.W);
+            new Vector4(v1.X + v2.X, v1.Y + v2.Y, v1.Z + v2.Z, v1.W + v2.W);
 
         public static Vector4 operator -(Vector4 v) =>
             new Vector4(-v.X, -v.Y, -v.Z, -v.W);
