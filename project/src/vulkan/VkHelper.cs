@@ -162,30 +162,32 @@ namespace Project.Vulkan {
             return false;
         }
 
-        public static Vk.Buffer CreateBuffer(VkState vulkan, Vk.DeviceSize size,
+        public static BufferWithMemory CreateBuffer(VkContext vulkan, Vk.DeviceSize size,
                 Vk.BufferUsageFlags usage, Vk.MemoryPropertyFlags memoryProps, 
-                Vk.SharingMode sharingMode, out Vk.DeviceMemory bufferMemory) {
+                Vk.SharingMode sharingMode) {
             var bufferInfo         = new Vk.BufferCreateInfo();
             bufferInfo.Size        = size;
             bufferInfo.Usage       = usage;
             bufferInfo.SharingMode = sharingMode;
+            
+            var container = new BufferWithMemory();
 
-            var buffer = vulkan.Device.CreateBuffer(bufferInfo);
+            container.Buffer = vulkan.Device.CreateBuffer(bufferInfo);
 
-            var memoryReqs = vulkan.Device.GetBufferMemoryRequirements(buffer);
+            var memoryReqs = vulkan.Device.GetBufferMemoryRequirements(container.Buffer);
             var allocInfo  = new Vk.MemoryAllocateInfo();
             allocInfo.AllocationSize  = memoryReqs.Size;
             allocInfo.MemoryTypeIndex = FindMemoryType(memoryReqs.MemoryTypeBits, 
                     vulkan.PhysicalDevice, memoryProps);
 
-            bufferMemory = vulkan.Device.AllocateMemory(allocInfo);
-            vulkan.Device.BindBufferMemory(buffer, bufferMemory, 0);
+            container.Memory = vulkan.Device.AllocateMemory(allocInfo);
+            container.Bind(vulkan.Device, 0);
 
-            return buffer;
+            return container;
         }
 
         public static void CopyBuffer(Vk.Buffer src, Vk.Buffer dest, Vk.DeviceSize size,
-                VkState state) {
+                VkContext state) {
             var commandBuffer = state.BeginSingleTimeCommands(state.TransferCommandPool);
 
             var copyRegion       = new Vk.BufferCopy();
@@ -306,9 +308,9 @@ namespace Project.Vulkan {
             throw new System.Exception("Failed to find suitable memory type!");
         }
 
-        public static Vk.Image CreateImage(VkState state, uint width, uint height, Vk.Format format,
-                Vk.ImageTiling tiling, Vk.ImageUsageFlags usageFlags, Vk.MemoryPropertyFlags props,
-                out Vk.DeviceMemory imageMemory) {
+        public static ImageWithMemory CreateImage(VkContext state, uint width, uint height, 
+                Vk.Format format, Vk.ImageTiling tiling, Vk.ImageUsageFlags usageFlags,
+                Vk.MemoryPropertyFlags props) {
             var extent = new Vk.Extent3D();
             extent.Width  = width;
             extent.Height = height;
@@ -326,21 +328,23 @@ namespace Project.Vulkan {
             imageInfo.Samples       = Vk.SampleCountFlags.Count1;
             imageInfo.SharingMode   = Vk.SharingMode.Exclusive;
 
-            var image      = state.Device.CreateImage(imageInfo);
-            var memoryReqs = state.Device.GetImageMemoryRequirements(image);
+            var image = new ImageWithMemory();
+
+            image.Image    = state.Device.CreateImage(imageInfo);
+            var memoryReqs = state.Device.GetImageMemoryRequirements(image.Image);
 
             var allocInfo = new Vk.MemoryAllocateInfo();
             allocInfo.AllocationSize = memoryReqs.Size;
             allocInfo.MemoryTypeIndex = FindMemoryType(memoryReqs.MemoryTypeBits, 
                     state.PhysicalDevice, props);
 
-            imageMemory = state.Device.AllocateMemory(allocInfo);
-            state.Device.BindImageMemory(image, imageMemory, 0);
+            image.Memory = state.Device.AllocateMemory(allocInfo);
+            image.Bind(state.Device, 0);
 
             return image;
         }
 
-        public static Vk.ImageView CreateImageView(VkState state, Vk.Image image, Vk.Format format,
+        public static Vk.ImageView CreateImageView(VkContext state, Vk.Image image, Vk.Format format,
                 Vk.ImageAspectFlags aspectFlags) {
             var subresourceRange = new Vk.ImageSubresourceRange();
             subresourceRange.AspectMask     = aspectFlags;
@@ -358,7 +362,7 @@ namespace Project.Vulkan {
             return state.Device.CreateImageView(viewInfo);
         }
 
-        public static Vk.Format FindSupportedFormat(VkState state, IEnumerable<Vk.Format> candidates,
+        public static Vk.Format FindSupportedFormat(VkContext state, IEnumerable<Vk.Format> candidates,
                 Vk.ImageTiling tiling, Vk.FormatFeatureFlags features) {
             foreach(Vk.Format format in candidates) {
                 var props = state.PhysicalDevice.GetFormatProperties(format);
@@ -373,7 +377,7 @@ namespace Project.Vulkan {
             throw new System.Exception("Failed to find a supported format.");
         }
 
-        public static Vk.Format FindDepthFormat(VkState state) =>
+        public static Vk.Format FindDepthFormat(VkContext state) =>
             FindSupportedFormat(state, new Vk.Format[] {
                 Vk.Format.D32Sfloat,
                 Vk.Format.D32SfloatS8Uint,
@@ -382,128 +386,5 @@ namespace Project.Vulkan {
 
         public static bool HasStencilComponent(Vk.Format format) =>
                 format == Vk.Format.D32SfloatS8Uint || format == Vk.Format.D24UnormS8Uint;
-    }
-
-    public struct DebugCallbackArgs {
-        public Vk.DebugReportFlagsExt Flags;
-        public Vk.DebugReportObjectTypeExt ObjectType;
-        public string LayerPrefix;
-        public int MessageCode;
-        public string Message;
-        public ulong Object;
-        public IntPtr Location;
-        public IntPtr UserDataPointer;
-    }
-
-    public struct QueueFamilyIndices {
-        public uint? GraphicsFamily;
-        public uint? PresentFamily;
-
-        public bool AllFamiliesExist() {
-            return this.GraphicsFamily.HasValue
-                && this.PresentFamily.HasValue;
-        }
-    }
-
-    public struct SwapchainSupportDetails {
-        public Vk.SurfaceCapabilitiesKhr capabilities;
-        public Vk.SurfaceFormatKhr[]     formats;
-        public Vk.PresentModeKhr[]       presentModes;
-    }
-
-    public struct DebugCallbackData {
-        public VkHelper.DebugCallback    callback;
-        public Vk.DebugReportCallbackExt wrapper;
-        public Vk.DebugReportFlagsExt    flags;
-    }
-
-    public struct SwapchainPipeline {
-        public Vk.SwapchainKhr    Swapchain;
-
-        public Vk.Format          Format;
-        public Vk.Extent2D        Extent;
-
-        public uint               ImageCapacity {
-            get => (uint) this.Images.Length;
-        }
-
-        public Vk.Image[]         Images;
-        public Vk.ImageView[]     ImageViews;
-        public Vk.Framebuffer[]   Framebuffers;
-        public Vk.Buffer[]        UniformBuffers;
-        public Vk.DeviceMemory[]  UniformBuffersMemory;
-        public Vk.DescriptorPool  DescriptorPool;
-        public Vk.DescriptorSet[] DescriptorSets;
-
-        public Vk.Image           DepthImage;
-        public Vk.DeviceMemory    DepthImageMemory;
-        public Vk.ImageView       DepthImageView;
-
-        public Vk.RenderPass      RenderPass;
-        public Vk.PipelineLayout  PipelineLayout;
-        public Vk.Pipeline        Pipeline;
-
-        public Vk.CommandBuffer[] CommandBuffers;
-
-        private Vk.CommandPool    commandPool;
-        private Vk.Device         device;
-
-        public void Setup(Vk.Device device, Vk.CommandPool commandPool) {
-            this.commandPool = commandPool;
-            this.device = device;
-        }
-
-        public void Cleanup() {
-            // Destroy Framebuffers
-            foreach(Vk.Framebuffer framebuffer in this.Framebuffers) {
-                this.device.DestroyFramebuffer(framebuffer);
-            }
-
-            // Free Command buffers
-            this.device.FreeCommandBuffers(this.commandPool, this.CommandBuffers);
-
-            // Destroy Pipeline
-            this.device.DestroyPipeline(this.Pipeline);
-
-            // Destroy Pipeline Layout
-            this.device.DestroyPipelineLayout(this.PipelineLayout);
-
-            // Destroy Render Pass
-            this.device.DestroyRenderPass(this.RenderPass);
-
-            // Destroy Image Views
-            foreach(Vk.ImageView imageView in this.ImageViews) {
-                this.device.DestroyImageView(imageView);
-            }
-
-            // Destroy Uniform Buffers and free their memory
-            for(int i = 0; i < this.ImageCapacity; i++) {
-                this.device.DestroyBuffer(this.UniformBuffers[i]);
-                this.device.FreeMemory(this.UniformBuffersMemory[i]);
-            }
-
-            // Destroy Descriptor Pool
-            this.device.DestroyDescriptorPool(this.DescriptorPool);
-
-            // Destroy Swapchain
-            this.device.DestroySwapchainKHR(this.Swapchain);
-        }
-    }
-
-    public struct SwapchainParameters {
-        public Vk.SurfaceFormatKhr         SurfaceFormat;
-        public Vk.PresentModeKhr           PresentMode;
-        public Vk.Extent2D                 Extent;
-        public uint                        MinImageCount;
-        public uint                        MaxImageCount;
-        public Vk.SurfaceTransformFlagsKhr CurrentTransform;
-    }
-
-    
-    [StructLayout(LayoutKind.Sequential)]
-    public struct UniformBufferObject {
-        public Mat4 Model;
-        public Mat4 View;
-        public Mat4 Projection;
     }
 }
