@@ -115,8 +115,8 @@ namespace Project.Math {
                 double width, double height, bool correctForVulkan = true) {
             double a = (2 * near) / width;
             double b = (2 * near) / height;
-            double c = 2 / (far - near);
-            double d = (far + near) / (far - near);
+            double c = -2 / (far - near);
+            double d = -(far + near) / (far - near);
 
             var matrix = new Matrix4(new double[] {
                 a, 0, 0, 0,
@@ -142,14 +142,14 @@ namespace Project.Math {
         }
 
         public static Matrix4 LookAtMatrix(Vector3 camera, Vector3 target, Vector3 up) {
-            var zRotation = (target - camera).Normal;
+            var zRotation = (camera - target).Normal;
             var xRotation = (up.Cross(zRotation)).Normal;
             var yRotation = zRotation.Cross(xRotation);
 
             var rotationMatrix = FromMatrix3(new Matrix3(xRotation, yRotation, zRotation).Transpose);
             var translationMatrix = TranslationMatrix4(-camera);
 
-            return translationMatrix * rotationMatrix;
+            return rotationMatrix * translationMatrix;
         }
 
         public static Matrix4 LookAtMatrix(Vector3 camera, Vector3 target) =>

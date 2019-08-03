@@ -527,7 +527,7 @@ namespace Project.Vulkan {
 
             var projection = Matrices.PerspectiveProjectionMatrix(0.01, 900, 1.25,
                     System.Math.PI / 2);
-            // var projection = Matrices.OrthographicProjectionMatrix(0.01, 100, 3.2, 2.4);
+            // var projection = Matrices.OrthographicProjectionMatrix(0.01, 1000, 3.2, 2.4);
             ubo.Projection = projection;
 
             var memory  = this.Pipeline.UniformBuffersMemory[index];
