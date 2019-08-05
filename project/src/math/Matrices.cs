@@ -132,6 +132,27 @@ namespace Project.Math {
             }
         }
 
+        public static Matrix4 IsometricTransformationMatrix(int quadrant = 0, bool below = false) {
+            var quad  = quadrant % 4;
+            var alpha = System.Math.Asin(System.Math.Tan(System.Math.PI / 6));
+            var beta  = System.Math.PI / 4;
+            var sign  = below ? -1 : 1;
+
+            var xRotationMatrix  = XRotationMatrix4(alpha);
+            var yRotationMatrix  = YRotationMatrix4(beta);
+
+            return xRotationMatrix * yRotationMatrix;
+        }
+
+        public static Matrix4 IsometricLookMatrix(Vector3 target, double distance, int quadrant = 0, bool below = false) {
+            var translationMatrix    = TranslationMatrix4(-target);
+            var transformationMatrix = IsometricTransformationMatrix(quadrant, below);
+
+            var viewMatrix           = TranslationMatrix4(0, -distance, 0);
+
+            return transformationMatrix * translationMatrix * viewMatrix;
+        }
+
         public static Matrix4 VulkanProjectionCorrectionMatrix() {
             return new Matrix4(new double[] {
                 1,  0,   0,   0,

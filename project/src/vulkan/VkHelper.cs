@@ -75,6 +75,8 @@ namespace Project.Vulkan {
                 args.Location        = location;
                 args.UserDataPointer = userDataPointer;
 
+                Console.WriteLine(message);
+
                 return callback.Invoke(args);
             };
         }
@@ -265,13 +267,12 @@ namespace Project.Vulkan {
             return fallback;
         }
         
-        public static Vk.Extent2D SelectSwapExtent(Vk.SurfaceCapabilitiesKhr capabilities, 
-                Window window) {
+        public static Vk.Extent2D SelectSwapExtent(Vk.SurfaceCapabilitiesKhr capabilities, Window window) {
             if(capabilities.CurrentExtent.Width != Int32.MaxValue) {
                 return capabilities.CurrentExtent;
             } else {
-                int width, height;
-                Glfw.GetFramebufferSize(window, out width, out height);
+                int width  = window.FramebufferWidth;
+                int height = window.FramebufferHeight;
 
                 Vk.Extent2D actualExtent = new Vk.Extent2D();
                 actualExtent.Width  = (uint) width;

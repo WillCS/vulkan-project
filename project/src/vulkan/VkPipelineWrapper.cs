@@ -35,7 +35,9 @@ namespace Project.Vulkan {
 
         public Vk.CommandBuffer[] CommandBuffers;
 
-        public void Cleanup(VkContext context) {
+        public void Destroy(VkContext context) {
+            context.WaitForIdle();
+            
             // Destroy Framebuffers
             foreach(Vk.Framebuffer framebuffer in this.Framebuffers) {
                 context.Device.DestroyFramebuffer(framebuffer);
@@ -66,6 +68,7 @@ namespace Project.Vulkan {
 
             // Destroy Depth Image View
             context.Device.DestroyImageView(this.DepthImageView);
+            context.Device.DestroyImage(this.DepthImage);
             context.Device.FreeMemory(this.DepthImageMemory);
 
             // Destroy Descriptor Pool
@@ -82,7 +85,6 @@ namespace Project.Vulkan {
         private Vk.SurfaceFormatKhr       surfaceFormat;
         private Vk.PresentModeKhr         presentMode;
         private Vk.SurfaceCapabilitiesKhr capabilities;
-        private Vk.Extent2D               imageExtent;
         private Vk.DescriptorSetLayout    descriptorSetLayout;
 
         private Vk.ShaderModule           vertexShader;
@@ -167,7 +169,7 @@ namespace Project.Vulkan {
             }
 
             Vk.SwapchainCreateInfoKhr createInfo = new Vk.SwapchainCreateInfoKhr();
-            createInfo.Surface          = context.Surface;
+            createInfo.Surface          = context.Window.VulkanSurface;
             createInfo.MinImageCount    = imageCount;
             createInfo.ImageFormat      = this.wrapper.Format;
             createInfo.ImageColorSpace  = this.surfaceFormat.ColorSpace;

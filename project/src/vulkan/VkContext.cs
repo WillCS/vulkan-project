@@ -41,8 +41,7 @@ namespace Project.Vulkan {
         public Vk.Queue GraphicsQueue;
         public Vk.Queue PresentQueue;
 
-        public GLFW.Window Window;
-        public Vk.SurfaceKhr Surface;
+        public Window Window;
 
         private List<DebugCallbackData> debugCallbacks;
 
@@ -100,7 +99,7 @@ namespace Project.Vulkan {
             this.debugCallbacks.Add(callbackData);
         }
 
-        public void SetWindow(GLFW.Window window) {
+        public void SetWindow(Window window) {
             this.Window = window;
         }
         
@@ -131,10 +130,10 @@ namespace Project.Vulkan {
 
         public bool EnsureQueueFamilySupport(Vk.PhysicalDevice device, Vk.QueueFlags family) =>
             VkHelper.CheckPhysicalDeviceQueueFamilySupport(device,
-                    family, this.Surface, out this.vkQueueFamilies);
+                    family, this.Window.VulkanSurface, out this.vkQueueFamilies);
 
         public SwapchainSupportDetails QuerySwapchainSupport(Vk.PhysicalDevice device) =>
-            VkHelper.QuerySwapchainSupport(device, this.Surface);
+            VkHelper.QuerySwapchainSupport(device, this.Window.VulkanSurface);
 
         public void InitVulkan() {
             this.createVulkanInstance();
@@ -146,7 +145,7 @@ namespace Project.Vulkan {
                 });
             }
 
-            this.createWindowSurface();
+            this.Window.CreateVulkanSurface();
 
             this.PhysicalDevice = VkHelper.SelectPhysicalDevice(this.Instance, this.physicalDeviceChecks);
 
@@ -292,21 +291,6 @@ namespace Project.Vulkan {
             }
         }
 
-        private void createWindowSurface() {
-            try {
-                IntPtr allocatorPointer = IntPtr.Zero;
-                IntPtr surfacePointer   = new IntPtr();
-                IntPtr instancePointer  = VkHelper.InstancePointer(this.Instance);
-                IntPtr windowPointer    = this.Window;
-
-                GLFW.Vulkan.CreateWindowSurface(instancePointer, windowPointer, allocatorPointer, out surfacePointer);
-
-                this.Surface = VkHelper.CreateSurfaceFromHandle(surfacePointer);
-            } catch(Vk.ResultException result) {
-                throw new VkException("An error occurred creating the window surface.", result);
-            }
-        }
-
         private void createLogicalDevice() {
             LogicalDeviceBuilder builder = new LogicalDeviceBuilder();
 
@@ -370,14 +354,14 @@ namespace Project.Vulkan {
 
         private void createPipelineWrapper() {
             if(!this.swapchainCleanedUp) {
-                this.Pipeline.Cleanup(this);
+                this.Pipeline.Destroy(this);
             }
 
             this.Device.WaitIdle();
 
             var builder = new GraphicsPipelineBuilder();
 
-            var support = VkHelper.QuerySwapchainSupport(this.PhysicalDevice, this.Surface);
+            var support = VkHelper.QuerySwapchainSupport(this.PhysicalDevice, this.Window.VulkanSurface);
 
             builder.SetCapabilities(support.capabilities);
             builder.SetSurfaceFormat(VkHelper.SelectSwapSurfaceFormat(support.formats));
@@ -388,6 +372,7 @@ namespace Project.Vulkan {
             builder.SetDescriptorSetLayout(this.DescriptorSetLayout);
             builder.SetVertexShader(this.VertexShader);
             builder.SetFragmentShader(this.FragmentShader);
+
             builder.SetRenderPassCallback((Vk.CommandBuffer buffer) => {
                 buffer.CmdBindVertexBuffer(0, this.vkVertexBuffer, 0);
                 buffer.CmdBindIndexBuffer(this.vkIndexBuffer, 0, Vk.IndexType.Uint16);
@@ -516,18 +501,22 @@ namespace Project.Vulkan {
         private void updateUniformBuffer(uint index) {
             double timeNow = GLFW.Glfw.Time;
             double dt = timeNow - this.startTime;
+            var width  = this.Pipeline.Extent.Width;
+            var height = this.Pipeline.Extent.Height;
 
             var ubo   = new UniformBufferObject();
 
-            var model = Matrices.YRotationMatrix4(dt);
+            var model = Matrix4.IDENTITY;//Matrices.YRotationMatrix4(dt);
             ubo.Model = model;
             
-            var view = Matrices.LookAtMatrix(new Vector3(100, 100, 100), Vector3.ZERO);
-            ubo.View = view;
-
-            var projection = Matrices.PerspectiveProjectionMatrix(0.01, 900, 1.25,
+            var view = Matrices.LookAtMatrix(new Vector3(-50, 50, -50), Vector3.IDENTITY);
+            var projection = Matrices.PerspectiveProjectionMatrix(0.01, 900, width / height,
                     System.Math.PI / 2);
-            // var projection = Matrices.OrthographicProjectionMatrix(0.01, 1000, 3.2, 2.4);
+
+            // var view = Matrices.IsometricLookMatrix(new Vector3(0, 0, 0), dt);
+            // var projection = Matrices.OrthographicProjectionMatrix(0.01, 1000, width / height, 1);
+
+            ubo.View = view;
             ubo.Projection = projection;
 
             var memory  = this.Pipeline.UniformBuffersMemory[index];
@@ -601,17 +590,17 @@ namespace Project.Vulkan {
             } catch(Vk.ResultException result) {
                 if(result.Result == Vk.Result.ErrorOutOfDateKhr || 
                         result.Result == Vk.Result.SuboptimalKhr ||
-                        Program.RESIZED) {
+                        this.Window.HasBeenResized) {
                     this.createPipelineWrapper();
-                    Program.RESIZED = false;
+                    this.Window.HasBeenResized = false;
                 } else {
                     throw new VkException("An error occurred while presenting an image.", result);
                 }
             }
         }
 
-        public void Cleanup() {
-            this.Pipeline.Cleanup(this);
+        public void Destroy() {
+            this.Pipeline.Destroy(this);
 
             // Destroy Descriptor Set Layout
             this.Device.DestroyDescriptorSetLayout(this.DescriptorSetLayout);
@@ -648,9 +637,6 @@ namespace Project.Vulkan {
                     this.Instance.DestroyDebugReportCallbackEXT(callback.wrapper);
                 });
             }
-
-            // Destroy Drawing Surface
-            this.Instance.DestroySurfaceKHR(this.Surface);
 
             // Destroy Instance
             this.Instance.Dispose();

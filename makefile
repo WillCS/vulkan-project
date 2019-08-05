@@ -42,4 +42,4 @@ $(PROJECT_DIR)/$(OUTPUT_DIR):
 clean:
 	rm -rf $(PROJECT_DIR)/$(OUTPUT_DIR)
 	rm -rf $(TEST_DIR)/$(OUTPUT_DIR)
-	rm $(PROJECT_DIR)/mono_crash\.*\.json
+	rm mono_crash\.*\.json
