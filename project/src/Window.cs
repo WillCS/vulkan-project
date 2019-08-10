@@ -31,6 +31,8 @@ namespace Project {
         private static Dictionary<IntPtr, Window> windowPointers = new Dictionary<IntPtr, Window>();
 
 
+        private Program program;
+
         /// <summary>
         ///     GLFW.NET's wrapper around a pointer to a GLFW Window. I don't
         ///     want to deal with this thing so I built a wrapper class around
@@ -74,6 +76,8 @@ namespace Project {
         /// </summary>
         private bool          contextInitialised;
 
+        private InputController inputController;
+
         /// <summary>
         ///     Whether or not the window has been resized. This is checked
         ///     during the render loop by the Vulkan context to determine if
@@ -82,7 +86,7 @@ namespace Project {
         public bool           HasBeenResized;
 
         /// <summary>
-        ///     The width of this window. 
+        ///     The width of this Window. 
         /// 
         ///     When this property is changed the Window is resized, which
         ///     causes the swapchain to be recreated.
@@ -100,7 +104,7 @@ namespace Project {
         }
 
         /// <summary>
-        ///     The height of this window. 
+        ///     The height of this Window. 
         /// 
         ///     When this property is changed the Window is resized, which
         ///     causes the swapchain to be recreated.
@@ -115,6 +119,17 @@ namespace Project {
                 this.framebufferHeight = value;
                 this.HasBeenResized    = true;
             }
+        }
+
+        /// <summary>
+        ///     Whether or not this Window is minimised.
+        /// </summary>
+        public bool IsMinimised {
+            get => this.FramebufferWidth == 0 || this.FramebufferHeight == 0;
+        }
+
+        public Program Program {
+            get => this.program;
         }
 
         /// <summary>
@@ -154,6 +169,12 @@ namespace Project {
             }
         }
 
+        public InputController InputController {
+            get => this.inputController;
+        }
+
+        public event KeyEvent KeyEvent;
+
         /// <summary>
         ///     Create a new Window. The Window will use **Vulkan**. I might
         ///     implement OpenGL support at a later date. Until then, this
@@ -162,7 +183,9 @@ namespace Project {
         /// <param name="width"> The width of the Window to create. </param>
         /// <param name="height"> The height of the Window to create. </param>
         /// <param name="title"> The title of the Window to create. </param>
-        public Window(int width, int height, string title) {
+        public Window(Program program, int width, int height, string title) {
+            this.program = program;
+            
             Glfw.WindowHint(Hint.ClientApi, GLFW.ClientApi.None);
 
             this.glfwWindow = Glfw.CreateWindow(width, height, title, 
@@ -179,6 +202,9 @@ namespace Project {
             this.HasBeenResized     = false;
 
             Glfw.SetFramebufferSizeCallback(this.glfwWindow, FramebufferSizeCallback);
+            Glfw.SetKeyCallback(this.glfwWindow, KeyCallback);
+
+            this.inputController = new InputController(this);
         }
 
         /// <summary>
@@ -312,8 +338,13 @@ namespace Project {
             windowPointers.Remove(this.glfwWindow);
             Glfw.DestroyWindow(this.glfwWindow);
 
-            this.vkContext.Instance.DestroySurfaceKHR(this.vkSurface);
-            this.vkContext.Destroy();
+            if(this.contextInitialised) {
+                if(this.surfaceInitialised) {
+                    this.vkContext.Instance.DestroySurfaceKHR(this.vkSurface);
+                }
+
+                this.vkContext.Destroy();
+            }
         }
 
         /// <summary>
@@ -383,6 +414,15 @@ namespace Project {
                 relevantWindow.HasBeenResized    = true;
             } else {
                 throw new System.Exception("Framebuffer Size Callback called on a window that doesn't exist.");
+            }
+        }
+
+        private static void KeyCallback(IntPtr windowPointer, Keys key, int scanCode, InputState state, ModifierKeys mods) {
+            if(windowPointers.ContainsKey(windowPointer)) {
+                Window relevantWindow = windowPointers[windowPointer];
+                relevantWindow.KeyEvent.Invoke(key, scanCode, state, mods);
+            } else {
+                throw new System.Exception("Key Callback called on a window that doesn't exist.");
             }
         }
     }

@@ -135,6 +135,10 @@ namespace Project.Vulkan {
         public SwapchainSupportDetails QuerySwapchainSupport(Vk.PhysicalDevice device) =>
             VkHelper.QuerySwapchainSupport(device, this.Window.VulkanSurface);
 
+        public void NextFrame() {
+            this.currentFrame = (this.currentFrame + 1) % this.maxFramesInFlight;
+        }
+
         public void InitVulkan() {
             this.createVulkanInstance();
 

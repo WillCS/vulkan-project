@@ -1,12 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using GLFW;
 using Project.Vulkan;
-using Vk = Vulkan;
-using System.Text;
-using Project.Math;
-using Project.Native;
-using System.Collections.Generic;
 
 namespace Project {
     public class Program {
@@ -15,8 +11,14 @@ namespace Project {
 
         private Window window;
 
+        private Stack<IState> states;
+
         private double timeLastLoop = 0;
         private double accumulator = 0;
+
+        public IState State {
+            get => this.states.Peek();
+        }
 
         static void Main(string[] args) {
             Program program = new Program();
@@ -24,9 +26,15 @@ namespace Project {
         }
 
         private void Run() {
+            this.InitState();
             this.InitWindow();
             this.MainLoop();
             this.Cleanup();
+        }
+
+        private void InitState() {
+            this.states = new Stack<IState>();
+            this.states.Push(new TestState());
         }
 
         private void InitWindow() {
@@ -42,7 +50,7 @@ namespace Project {
             
             this.timeLastLoop = Glfw.Time;
 
-            this.window = new Window(640, 480, "Vulkan");
+            this.window = new Window(this, 640, 480, "Vulkan");
             this.window.InitVulkanContext();
         }
 
@@ -50,9 +58,9 @@ namespace Project {
             VkContext vulkan = this.window.VulkanContext;
             while(!this.window.ShouldClose()) {
                 double currentTime = Glfw.Time;
-                double deltaTime = currentTime - this.timeLastLoop;
+                double deltaTime   = currentTime - this.timeLastLoop;
 
-                this.accumulator += deltaTime;
+                this.accumulator  += deltaTime;
                 this.timeLastLoop = currentTime;
 
                 if(this.accumulator >= TICK_TIME * 4) {
@@ -65,10 +73,9 @@ namespace Project {
 
                 Glfw.PollEvents();
 
-                if(!(this.window.FramebufferWidth == 0 || this.window.FramebufferHeight == 0)) {
+                if(!this.window.IsMinimised) {
                     vulkan.DrawFrame();
-                    vulkan.currentFrame = 
-                            (vulkan.currentFrame + 1) % vulkan.maxFramesInFlight;
+                    vulkan.NextFrame();
                 }
             }
 
